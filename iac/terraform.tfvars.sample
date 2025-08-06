@@ -1,0 +1,13 @@
+# Sample Terraform Variables File
+# Copy this file to terraform.tfvars and update the values
+
+# Required variables
+subscription_id                = "your-subscription-id-here"
+resource_group_location        = "westus"
+resource_group_location_abbr   = "wu"
+environment_name              = "dev"
+project_name                  = "contentunderstanding"
+
+# Optional variables
+deploy_ai_services = true
+enable_telemetry   = false
