@@ -59,6 +59,14 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
     - [ ] Retrieving analysis results
     - [ ] Simple error handling (pass-through server responses)
 
+- [ ] **Implement Health Check Service**
+  - [ ] Create health check controller to verify Azure resource connectivity
+  - [ ] Test Azure Content Understanding endpoint accessibility
+  - [ ] Verify Key Vault authentication and secret retrieval
+  - [ ] Check Storage Account access and container availability
+  - [ ] Validate managed identity permissions
+  - [ ] Return comprehensive health status with detailed diagnostics
+
 - [ ] **Create Request/Response Models**
   - [ ] Define simple model classes for API requests and responses
   - [ ] JSON serialization attributes for Content Understanding format
