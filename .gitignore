@@ -153,3 +153,6 @@ docker-compose.debug.yml
 samples/private/
 docs/private/
 *.private.*
+
+# Analysis output files
+Output/
