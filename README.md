@@ -4,12 +4,18 @@ A comprehensive .NET 8 sample application demonstrating Azure Content Understand
 
 ## 🚀 Features
 
-- ✅ **Complete Azure Content Understanding API integration** with authentication
+- ✅ **Complete Azure Content Understa💾 Complete results saved to output files for detailed review.
+📁 Results saved to:
+    📄 Raw JSON: Output\receipt_069e39de-5132-425d-87b7_2025-08-07_09-46-09_results.json
+    📋 Formatted: Output\receipt_069e39de-5132-425d-87b7_2025-08-07_09-46-09_formatted.txtg API integration** with authentication and URL constants
+- ✅ **Enhanced polling system** with 20-minute timeout and progressive backoff for long-running operations
+- ✅ **Improved JSON result parsing** with proper field extraction and error handling
 - ✅ **Health checks for all Azure resources** (Content Understanding, Key Vault, Storage Account)
 - ✅ **JSON-based analyzer schema management** with automatic discovery and validation
 - ✅ **End-to-end document analysis pipeline** with real-time polling
 - ✅ **Rich result formatting** with confidence levels and structured data display
-- ✅ **Results export** to JSON and formatted text files with timestamps
+- ✅ **Results export** to JSON and formatted text files with clean filename generation
+- ✅ **Enhanced error handling** with operation timeout management and progressive retry logic
 - ✅ **Parameterized CLI operations** with intelligent defaults and flexible file matching
 - ✅ **Multi-format document support** (PDF, PNG, JPG, JPEG, TIFF, BMP)
 - ✅ **Multiple execution modes** (interactive, health, analyzers, create, analyze)
@@ -235,8 +241,8 @@ When running `dotnet run -- --mode analyze --document receipt.png`, you'll see t
 🎯 Using specified analyzer: receipt
 🧠 Analyzing document with analyzer: receipt
 ✅ Document analysis submitted successfully!
-⏳ Polling for analysis results...
-🎉 Analysis completed successfully! (completed in 2 polling attempts)
+⏳ Polling for analysis results (timeout: 20 minutes, progressive backoff)...
+🎉 Analysis completed successfully! (completed in 2 polling attempts, took 25 seconds)
 
 📊 ANALYSIS SUMMARY:
 ===================
@@ -298,8 +304,8 @@ azure-ai-content-understanding-basic/
 │   │   │   ├── *_results.json             # Raw JSON results with timestamps
 │   │   │   └── *_formatted.txt            # Human-readable formatted results
 │   │   └── appsettings.json              # Configuration
-│   └── ContentUnderstanding.Models/       # Shared data models
-│       └── ContentUnderstandingModels.cs  # Request/response objects
+│   └── ContentUnderstanding.Models/       # Cleaned analyzer definition models (2 essential classes)
+│       └── ContentUnderstandingModels.cs  # AnalyzerDefinition & FieldDefinition only
 ├── iac/                                   # Infrastructure as Code (Terraform)
 │   ├── main.tf                           # Main infrastructure definition
 │   ├── variables.tf                      # Input parameters
@@ -397,7 +403,9 @@ The application uses `appsettings.json` for non-sensitive configuration and Azur
 
 ## Documentation
 
-- [Initial Project Plan](docs/initial_plan.md)
+- [Quick Reference Guide](docs/QUICK_REFERENCE.md) - Command examples and troubleshooting
+- [Configuration Guide](docs/CONFIGURATION.md) - Detailed setup and authentication  
+- [Initial Project Plan](docs/initial_plan.md) - Development roadmap and task completion
 - [Azure Content Understanding Documentation](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/)
 
 ## License

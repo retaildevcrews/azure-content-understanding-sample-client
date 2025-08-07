@@ -51,13 +51,14 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
 ### Phase 3: Core Application Development
 
 - [x] **Implement HTTP Service Classes**
-  - [x] Create simple HTTP service class for Content Understanding API calls
+  - [x] Create HTTP service class with URL constants and helper methods
   - [x] Implement authentication using DefaultAzureCredential
+  - [x] Consolidated URL building with API version and path constants
   - [x] Add methods for direct REST API calls:
     - [x] Adding/updating analyzer schema
     - [x] Submitting files for analysis
-    - [x] Retrieving analysis results
-    - [x] Simple error handling (pass-through server responses)
+    - [x] Retrieving analysis results with enhanced polling
+    - [x] Improved error handling with operation status tracking
 
 - [x] **Implement Health Check Service**
   - [x] Create health check controller to verify Azure resource connectivity
@@ -68,9 +69,10 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
   - [x] Return comprehensive health status with detailed diagnostics
 
 - [x] **Create Request/Response Models**
-  - [x] Define simple model classes for API requests and responses
+  - [x] Define simple model classes for API requests and responses (cleaned up)
   - [x] JSON serialization attributes for Content Understanding format
-  - [x] Keep models lightweight and focused on the specific operations needed
+  - [x] Removed unused model classes - keeping only AnalyzerDefinition & FieldDefinition
+  - [x] Lightweight and focused on analyzer schema creation operations
 
 - [x] **Create Sample Analyzer Schema**
   - [x] Define a sample document type (e.g., invoice, receipt, or form)
@@ -100,8 +102,10 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
 - [x] **Implement Basic Document Analysis**
   - [x] Complete end-to-end document analysis workflow working
   - [x] Receipt analyzer successfully extracts VendorName and Items
-  - [x] Operation-Location header polling implemented correctly
-  - [x] Real-time status tracking and result parsing
+  - [x] Enhanced Operation-Location header polling with 20-minute timeout
+  - [x] Progressive backoff polling (10s → 15s → 20s → 30s max intervals)
+  - [x] Real-time status tracking and improved result parsing
+  - [x] Clean filename generation with operation ID extraction
 
 - [x] **Implement Error Handling and Validation**
   - [x] Enhanced HTTP status code handling for API calls

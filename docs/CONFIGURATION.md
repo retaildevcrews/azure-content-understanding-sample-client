@@ -100,6 +100,22 @@ The application includes a health check that verifies:
 3. **Storage Access** - Can connect using connection string from Key Vault
 4. **Configuration Validation** - All required settings are present
 
+## Operation Polling Configuration
+
+The application uses an enhanced polling system for long-running Content Understanding operations:
+
+- **Polling Timeout**: 20 minutes maximum wait time
+- **Progressive Backoff**: Starts at 10 seconds, gradually increases to 30 seconds maximum
+- **Retry Logic**: Continues polling even if individual requests fail
+- **Clean Results**: Operation IDs are cleaned for readable filenames
+- **Export Format**: Results saved as both JSON and formatted text with operation ID included
+
+### Polling Intervals
+1. **Initial attempts (1-3)**: 10 seconds
+2. **Mid-range attempts (4-8)**: 15 seconds  
+3. **Later attempts (9-20)**: 20 seconds
+4. **Final attempts (21+)**: 30 seconds (maximum)
+
 ## Troubleshooting
 
 ### Common Issues
@@ -120,6 +136,13 @@ The application includes a health check that verifies:
    - Check `Storage Blob Data Contributor` role assignment
    - Ensure storage account allows Azure services bypass
    - Verify managed identity authentication is working
+
+4. **Long-Running Operations**
+   - Operations may take up to 15-20 minutes for complex documents
+   - Application automatically handles timeout and retry logic
+   - Check operation ID in Azure portal if polling times out
+   - Use `--operation-id <id>` parameter to check specific operations
+   - Look for results files in Output directory even if polling fails
 
 ### Debug Steps
 
