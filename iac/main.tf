@@ -34,8 +34,15 @@ resource "azurerm_key_vault" "this" {
   tenant_id           = data.azurerm_client_config.current.tenant_id
   sku_name            = "standard"
   
-  enable_rbac_authorization = true
-  purge_protection_enabled  = false
+  enable_rbac_authorization     = true
+  purge_protection_enabled      = false
+  public_network_access_enabled = true  # Enable for local development
+  
+  # Network access rules for development
+  network_acls {
+    default_action = "Allow"  # Allow all access for development
+    bypass         = "AzureServices"
+  }
   
   tags = local.tags
 }

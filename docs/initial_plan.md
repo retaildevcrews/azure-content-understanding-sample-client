@@ -50,39 +50,41 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
 
 ### Phase 3: Core Application Development
 
-- [ ] **Implement HTTP Service Classes**
-  - [ ] Create simple HTTP service class for Content Understanding API calls
-  - [ ] Implement authentication using DefaultAzureCredential
-  - [ ] Add methods for direct REST API calls:
-    - [ ] Adding/updating analyzer schema
-    - [ ] Submitting files for analysis
-    - [ ] Retrieving analysis results
-    - [ ] Simple error handling (pass-through server responses)
+- [x] **Implement HTTP Service Classes**
+  - [x] Create simple HTTP service class for Content Understanding API calls
+  - [x] Implement authentication using DefaultAzureCredential
+  - [x] Add methods for direct REST API calls:
+    - [x] Adding/updating analyzer schema
+    - [x] Submitting files for analysis
+    - [x] Retrieving analysis results
+    - [x] Simple error handling (pass-through server responses)
 
-- [ ] **Implement Health Check Service**
-  - [ ] Create health check controller to verify Azure resource connectivity
-  - [ ] Test Azure Content Understanding endpoint accessibility
-  - [ ] Verify Key Vault authentication and secret retrieval
-  - [ ] Check Storage Account access and container availability
-  - [ ] Validate managed identity permissions
-  - [ ] Return comprehensive health status with detailed diagnostics
+- [x] **Implement Health Check Service**
+  - [x] Create health check controller to verify Azure resource connectivity
+  - [x] Test Azure Content Understanding endpoint accessibility
+  - [x] Verify Key Vault authentication and secret retrieval
+  - [x] Check Storage Account access and container availability
+  - [x] Validate managed identity permissions
+  - [x] Return comprehensive health status with detailed diagnostics
 
-- [ ] **Create Request/Response Models**
-  - [ ] Define simple model classes for API requests and responses
-  - [ ] JSON serialization attributes for Content Understanding format
-  - [ ] Keep models lightweight and focused on the specific operations needed
+- [x] **Create Request/Response Models**
+  - [x] Define simple model classes for API requests and responses
+  - [x] JSON serialization attributes for Content Understanding format
+  - [x] Keep models lightweight and focused on the specific operations needed
 
-- [ ] **Create Sample Analyzer Schema**
-  - [ ] Define a sample document type (e.g., invoice, receipt, or form)
-  - [ ] Create JSON schema following Azure Content Understanding format
-  - [ ] Include field definitions and extraction rules
+- [x] **Create Sample Analyzer Schema**
+  - [x] Define a sample document type (e.g., invoice, receipt, or form)
+  - [x] Create JSON schema following Azure Content Understanding format
+  - [x] Include field definitions and extraction rules
+  - [x] Implement JSON file-based approach for easy maintenance
 
-- [ ] **Implement Main Application Logic**
-  - [ ] Configuration management (appsettings.json + Key Vault for secrets)
-  - [ ] Logging setup
-  - [ ] Main workflow implementation:
-    - [ ] Load and validate analyzer schema
-    - [ ] Upload/update schema to Content Understanding endpoint
+- [x] **Implement Main Application Logic**
+  - [x] Configuration management (appsettings.json + Key Vault for secrets)
+  - [x] Logging setup
+  - [x] Main workflow implementation:
+    - [x] Load and validate analyzer schema from JSON files
+    - [x] Upload/update schema to Content Understanding endpoint
+    - [x] Multiple execution modes (health, interactive, list-analyzers, create-analyzer)
     - [ ] Select sample document for analysis
     - [ ] Submit document for processing
     - [ ] Poll for completion and retrieve results

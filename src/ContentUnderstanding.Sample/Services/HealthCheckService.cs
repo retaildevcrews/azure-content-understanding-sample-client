@@ -162,7 +162,7 @@ public class HealthCheckService
             httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
 
             // Test the analyzers endpoint to verify both connectivity and authentication
-            var analyzersEndpoint = $"{endpoint.TrimEnd('/')}/content-understanding/analyzers?api-version=2023-10-01-preview";
+            var analyzersEndpoint = $"{endpoint.TrimEnd('/')}/contentunderstanding/analyzers?api-version=2025-05-01-preview";
             var response = await httpClient.GetAsync(analyzersEndpoint);
             
             if (response.IsSuccessStatusCode)
