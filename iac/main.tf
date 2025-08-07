@@ -55,9 +55,17 @@ resource "azurerm_storage_account" "this" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
   
-  # Security settings
+  # Security settings - allow Azure services and trusted Microsoft services
   allow_nested_items_to_be_public = false
-  shared_access_key_enabled       = true
+  public_network_access_enabled   = true  # Required for development and Azure services access
+  shared_access_key_enabled       = true  # Required for Terraform to create containers
+  
+  # Network access control
+  network_rules {
+    default_action = "Allow"  # For development - can be restricted in production
+    # Allow access from Azure services (required for Content Understanding)
+    bypass = ["AzureServices", "Logging", "Metrics"]
+  }
   
   tags = local.tags
 }
@@ -93,33 +101,15 @@ module "ai_services" {
   tags                              = local.tags
 }
 
-# Store AI Services endpoint and key in Key Vault
-resource "azurerm_key_vault_secret" "ai_services_endpoint" {
+# Store only the AI Services API key in Key Vault (this is the real secret)
+resource "azurerm_key_vault_secret" "ai_services_key" {
   count        = var.deploy_ai_services ? 1 : 0
-  name         = "ai-services-endpoint"
-  value        = module.ai_services[0].resource.endpoint
+  name         = "ai-services-key"
+  value        = module.ai_services[0].primary_access_key
   key_vault_id = azurerm_key_vault.this.id
-  
-  depends_on = [azurerm_role_assignment.kv_admin]
-}
 
-# Note: Commenting out AI Services Key secret temporarily
-# We'll use Managed Identity instead of keys for better security
-# resource "azurerm_key_vault_secret" "ai_services_key" {
-#   count        = var.deploy_ai_services ? 1 : 0
-#   name         = "ai-services-key"
-#   value        = module.ai_services[0].private_keys.primary_key
-#   key_vault_id = azurerm_key_vault.this.id
-
-#   depends_on = [azurerm_role_assignment.kv_admin]
-# }# Store storage connection string in Key Vault
-resource "azurerm_key_vault_secret" "storage_connection_string" {
-  name         = "storage-connection-string"
-  value        = azurerm_storage_account.this.primary_connection_string
-  key_vault_id = azurerm_key_vault.this.id
-  
   depends_on = [azurerm_role_assignment.kv_admin]
-}
+}# Remove the storage account name secret - this is not sensitive data
 
 # Cognitive Services User role assignment for current user
 resource "azurerm_role_assignment" "ai_services_user" {

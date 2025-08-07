@@ -105,15 +105,19 @@ public class Program
         var healthCheckService = serviceProvider.GetRequiredService<HealthCheckService>();
         var healthResult = await healthCheckService.CheckHealthAsync();
         
+        // Display the full health check results in interactive mode too
+        logger.LogInformation("");
+        healthResult.DisplayResults(logger);
+        
         if (healthResult.OverallStatus == "Failed")
         {
-            logger.LogError("Health check failed. Please fix issues before proceeding.");
+            logger.LogError("❌ Health check failed. Please fix issues before proceeding.");
             logger.LogInformation("Run with --mode health for detailed diagnostics.");
             return;
         }
         else if (healthResult.OverallStatus == "Warning")
         {
-            logger.LogWarning("Health check completed with warnings. Some features may not work correctly.");
+            logger.LogWarning("⚠️ Health check completed with warnings. Some features may not work correctly.");
         }
         else
         {

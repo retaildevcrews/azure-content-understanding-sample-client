@@ -6,7 +6,7 @@ subscription_id                = "your-subscription-id-here"
 resource_group_location        = "westus"
 resource_group_location_abbr   = "wu"
 environment_name              = "dev"
-project_name                  = "contentunderstanding"
+project_name                  = "cusmple"
 
 # Optional variables
 deploy_ai_services = true

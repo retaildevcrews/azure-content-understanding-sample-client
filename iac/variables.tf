@@ -19,7 +19,7 @@ variable "environment_name" {
 variable "project_name" {
   type        = string
   description = "The name of the project."
-  default     = "contentunderstanding"
+  default     = "cusmple"
 }
 
 variable "subscription_id" {

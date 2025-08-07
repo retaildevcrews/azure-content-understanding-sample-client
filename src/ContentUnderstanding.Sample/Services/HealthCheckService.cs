@@ -20,7 +20,16 @@ public class HealthCheckService
     {
         _configuration = configuration;
         _logger = logger;
-        _credential = new DefaultAzureCredential();
+        
+        // Use more timeout-friendly options for local development
+        var options = new DefaultAzureCredentialOptions
+        {
+            ExcludeAzureCliCredential = false,
+            ExcludeEnvironmentCredential = false,
+            ExcludeManagedIdentityCredential = true, // Disable managed identity for local dev
+            ExcludeVisualStudioCredential = false
+        };
+        _credential = new DefaultAzureCredential(options);
     }
 
     /// <summary>
@@ -29,7 +38,7 @@ public class HealthCheckService
     /// <returns>Health check results with detailed status for each service</returns>
     public async Task<HealthCheckResult> CheckHealthAsync()
     {
-        _logger.LogInformation("Starting comprehensive health check of Azure resources...");
+        _logger.LogInformation("🚀 Starting comprehensive health check of Azure resources...");
         
         var result = new HealthCheckResult
         {
@@ -47,7 +56,11 @@ public class HealthCheckService
 
         try
         {
-            var serviceChecks = await Task.WhenAll(checks);
+            _logger.LogInformation("⏳ Running {Count} health checks (timeout: 2 minutes)...", checks.Count);
+            
+            // Add timeout to prevent hanging
+            var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            var serviceChecks = await Task.WhenAll(checks).WaitAsync(timeoutCts.Token);
             result.ServiceChecks = serviceChecks.ToList();
 
             // Determine overall status
@@ -70,7 +83,13 @@ public class HealthCheckService
                 result.Summary = "All services are accessible and functioning correctly";
             }
 
-            _logger.LogInformation("Health check completed. Status: {Status}", result.OverallStatus);
+            _logger.LogInformation("✅ Health check completed. Status: {Status}", result.OverallStatus);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogError("Health check timed out after 2 minutes");
+            result.OverallStatus = "Failed";
+            result.Summary = "Health check timed out - one or more services took too long to respond";
         }
         catch (Exception ex)
         {
@@ -83,10 +102,12 @@ public class HealthCheckService
     }
 
     /// <summary>
-    /// Checks Azure Content Understanding service accessibility
+    /// Checks Azure Content Understanding service accessibility using API key from Key Vault
     /// </summary>
     private async Task<ServiceHealthCheck> CheckContentUnderstandingServiceAsync()
     {
+        _logger.LogInformation("🧠 Checking Azure Content Understanding service...");
+        
         var check = new ServiceHealthCheck
         {
             ServiceName = "Azure Content Understanding",
@@ -95,38 +116,72 @@ public class HealthCheckService
 
         try
         {
+            // Get endpoint from configuration and API key from Key Vault
             var endpoint = _configuration["AzureContentUnderstanding:Endpoint"];
             if (string.IsNullOrEmpty(endpoint))
             {
                 check.Status = "Failed";
                 check.Message = "Content Understanding endpoint not configured";
-                check.Details = "Check appsettings.json or Key Vault for AzureContentUnderstanding:Endpoint";
+                check.Details = "Configure AzureContentUnderstanding:Endpoint in appsettings.json";
+                return check;
+            }
+
+            var keyVaultUri = _configuration["AzureKeyVault:VaultUri"];
+            if (string.IsNullOrEmpty(keyVaultUri))
+            {
+                check.Status = "Failed";
+                check.Message = "Key Vault URI not configured - cannot retrieve API key";
+                check.Details = "Configure AzureKeyVault:VaultUri in appsettings.json";
+                return check;
+            }
+
+            var keyVaultClient = new SecretClient(new Uri(keyVaultUri), _credential);
+            string apiKey;
+            
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var keySecret = await keyVaultClient.GetSecretAsync("ai-services-key", cancellationToken: cts.Token);
+                apiKey = keySecret.Value.Value;
+                _logger.LogDebug("Retrieved Content Understanding API key from Key Vault");
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+            {
+                check.Status = "Failed";
+                check.Message = "Content Understanding API key not found in Key Vault";
+                check.Details = "Expected secret 'ai-services-key' in Key Vault (created by Terraform deployment)";
                 return check;
             }
 
             using var httpClient = new HttpClient();
             
-            // Add authentication header
-            var token = await _credential.GetTokenAsync(
-                new Azure.Core.TokenRequestContext(new[] { "https://cognitiveservices.azure.com/.default" }));
-            httpClient.DefaultRequestHeaders.Authorization = 
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.Token);
-
-            // Test basic connectivity with a simple GET request to the service
-            var response = await httpClient.GetAsync($"{endpoint.TrimEnd('/')}/");
+            // Set timeout to prevent hanging
+            httpClient.Timeout = TimeSpan.FromSeconds(30);
             
-            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            // Add authentication header using API key
+            httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
+
+            // Test the analyzers endpoint to verify both connectivity and authentication
+            var analyzersEndpoint = $"{endpoint.TrimEnd('/')}/content-understanding/analyzers?api-version=2023-10-01-preview";
+            var response = await httpClient.GetAsync(analyzersEndpoint);
+            
+            if (response.IsSuccessStatusCode)
             {
-                // 404 is expected for root endpoint, indicates service is accessible
                 check.Status = "Healthy";
-                check.Message = "Service is accessible";
-                check.Details = $"Endpoint: {endpoint}, Response: {response.StatusCode}";
+                check.Message = "Content Understanding service is accessible with API key authentication";
+                check.Details = $"Endpoint: {endpoint}, Analyzers API responded with {response.StatusCode}";
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                check.Status = "Failed";
+                check.Message = "Authentication failed - check API key validity";
+                check.Details = $"Endpoint: {endpoint}, API key may be invalid or expired";
             }
             else
             {
                 check.Status = "Warning";
-                check.Message = $"Unexpected response from service: {response.StatusCode}";
-                check.Details = $"Endpoint: {endpoint}";
+                check.Message = $"Service responded with {response.StatusCode}";
+                check.Details = $"Endpoint: {endpoint}, Response: {await response.Content.ReadAsStringAsync()}";
             }
         }
         catch (Azure.Identity.AuthenticationFailedException ex)
@@ -156,6 +211,8 @@ public class HealthCheckService
     /// </summary>
     private async Task<ServiceHealthCheck> CheckKeyVaultAccessAsync()
     {
+        _logger.LogInformation("🔐 Checking Azure Key Vault access...");
+        
         var check = new ServiceHealthCheck
         {
             ServiceName = "Azure Key Vault",
@@ -176,7 +233,8 @@ public class HealthCheckService
             var client = new SecretClient(new Uri(keyVaultUri), _credential);
             
             // Test access by trying to list secrets (this doesn't retrieve values)
-            var secretPages = client.GetPropertiesOfSecretsAsync();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var secretPages = client.GetPropertiesOfSecretsAsync(cancellationToken: cts.Token);
             var secretCount = 0;
             
             await foreach (var secretProperty in secretPages)
@@ -190,7 +248,7 @@ public class HealthCheckService
             check.Details = $"URI: {keyVaultUri}, Found {secretCount} secret(s)";
 
             // Try to retrieve a specific secret if configured
-            var testSecretName = "ai-services-endpoint";
+            var testSecretName = "ai-services-key";
             try
             {
                 var secret = await client.GetSecretAsync(testSecretName);
@@ -224,10 +282,12 @@ public class HealthCheckService
     }
 
     /// <summary>
-    /// Checks Storage Account accessibility and container operations
+    /// Checks Storage Account accessibility using managed identity authentication
     /// </summary>
     private async Task<ServiceHealthCheck> CheckStorageAccountAccessAsync()
     {
+        _logger.LogInformation("💾 Checking Azure Storage Account access...");
+        
         var check = new ServiceHealthCheck
         {
             ServiceName = "Azure Storage Account",
@@ -236,23 +296,26 @@ public class HealthCheckService
 
         try
         {
+            // Get storage account name from configuration
             var storageAccountName = _configuration["AzureStorage:AccountName"];
-            var containerName = _configuration["AzureStorage:ContainerName"] ?? "samples";
-
             if (string.IsNullOrEmpty(storageAccountName))
             {
                 check.Status = "Failed";
                 check.Message = "Storage account name not configured";
-                check.Details = "Check appsettings.json for AzureStorage:AccountName";
+                check.Details = "Configure AzureStorage:AccountName in appsettings.json";
                 return check;
             }
 
-            var blobServiceUri = new Uri($"https://{storageAccountName}.blob.core.windows.net");
-            var blobServiceClient = new BlobServiceClient(blobServiceUri, _credential);
+            // Create BlobServiceClient using managed identity
+            var storageUri = new Uri($"https://{storageAccountName}.blob.core.windows.net/");
+            var blobServiceClient = new BlobServiceClient(storageUri, _credential);
+
+            var containerName = _configuration["AzureStorage:ContainerName"] ?? "samples";
             
-            // Test container access
+            // Test container access using managed identity
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-            var containerExists = await containerClient.ExistsAsync();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var containerExists = await containerClient.ExistsAsync(cancellationToken: cts.Token);
 
             if (containerExists.Value)
             {
@@ -267,20 +330,20 @@ public class HealthCheckService
                 }
 
                 check.Status = "Healthy";
-                check.Message = "Storage account and container are accessible";
-                check.Details = $"Account: {storageAccountName}, Container: {containerName}, Blobs: {blobCount}";
+                check.Message = "Storage account and container are accessible using managed identity";
+                check.Details = $"Account: {blobServiceClient.AccountName}, Container: {containerName}, Blobs: {blobCount}";
             }
             else
             {
                 check.Status = "Warning";
                 check.Message = "Storage account accessible but container not found";
-                check.Details = $"Account: {storageAccountName}, Missing container: {containerName}";
+                check.Details = $"Account: {blobServiceClient.AccountName}, Missing container: {containerName}";
             }
         }
         catch (Azure.Identity.AuthenticationFailedException ex)
         {
             check.Status = "Failed";
-            check.Message = "Authentication failed for Storage Account";
+            check.Message = "Authentication failed for Key Vault access";
             check.Details = ex.Message;
         }
         catch (Azure.RequestFailedException ex)
@@ -304,6 +367,8 @@ public class HealthCheckService
     /// </summary>
     private async Task<ServiceHealthCheck> CheckManagedIdentityAsync()
     {
+        _logger.LogInformation("🆔 Checking managed identity authentication...");
+        
         var check = new ServiceHealthCheck
         {
             ServiceName = "Managed Identity",
@@ -327,16 +392,23 @@ public class HealthCheckService
             {
                 try
                 {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     var token = await _credential.GetTokenAsync(
-                        new Azure.Core.TokenRequestContext(new[] { scope }));
+                        new Azure.Core.TokenRequestContext(new[] { scope }), cts.Token);
                     
                     if (!string.IsNullOrEmpty(token.Token))
                     {
                         successfulScopes.Add(scope.Split('/')[2]); // Extract service name
                     }
                 }
-                catch
+                catch (OperationCanceledException)
                 {
+                    _logger.LogDebug("Timeout getting token for scope: {Scope}", scope);
+                    failedScopes.Add(scope.Split('/')[2] + " (timeout)");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug("Failed to get token for scope: {Scope}, Error: {Error}", scope, ex.Message);
                     failedScopes.Add(scope.Split('/')[2]);
                 }
             }
@@ -389,14 +461,35 @@ public class HealthCheckResult
 
     public void DisplayResults(ILogger logger)
     {
-        logger.LogInformation("=== HEALTH CHECK RESULTS ===");
-        logger.LogInformation("Timestamp: {Timestamp}", Timestamp);
-        logger.LogInformation("Overall Status: {Status}", OverallStatus);
-        logger.LogInformation("Summary: {Summary}", Summary);
+        logger.LogInformation("==========================================");
+        logger.LogInformation("🏥 HEALTH CHECK RESULTS");
+        logger.LogInformation("==========================================");
+        logger.LogInformation("⏰ Timestamp: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC", Timestamp);
+        
+        var statusEmoji = OverallStatus switch
+        {
+            "Healthy" => "✅",
+            "Warning" => "⚠️",
+            "Failed" => "❌",
+            _ => "❓"
+        };
+        
+        logger.LogInformation("📊 Overall Status: {Emoji} {Status}", statusEmoji, OverallStatus);
+        logger.LogInformation("📝 Summary: {Summary}", Summary);
         logger.LogInformation("");
+        logger.LogInformation("🔍 Individual Service Results:");
+        logger.LogInformation("------------------------------------------");
 
         foreach (var check in ServiceChecks)
         {
+            var emoji = check.Status switch
+            {
+                "Healthy" => "✅",
+                "Warning" => "⚠️",
+                "Failed" => "❌",
+                _ => "❓"
+            };
+            
             var logLevel = check.Status switch
             {
                 "Healthy" => LogLevel.Information,
@@ -405,14 +498,16 @@ public class HealthCheckResult
                 _ => LogLevel.Information
             };
 
-            logger.Log(logLevel, "🔍 {ServiceName}: {Status}", check.ServiceName, check.Status);
-            logger.Log(logLevel, "   Message: {Message}", check.Message);
+            logger.Log(logLevel, "{Emoji} {ServiceName}: {Status}", emoji, check.ServiceName, check.Status);
+            logger.Log(logLevel, "   📄 {Message}", check.Message);
             if (!string.IsNullOrEmpty(check.Details))
             {
-                logger.Log(logLevel, "   Details: {Details}", check.Details);
+                logger.Log(logLevel, "   🔎 {Details}", check.Details);
             }
             logger.LogInformation("");
         }
+        
+        logger.LogInformation("==========================================");
     }
 
     public string ToJson()
