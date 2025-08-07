@@ -57,7 +57,7 @@ public class Program
                     break;
                 case "create-analyzer":
                 case "create":
-                    await RunCreateAnalyzerAsync(serviceProvider, analyzerFile);
+                    await RunCreateAnalyzerAsync(serviceProvider, analyzerName, analyzerFile);
                     break;
                 case "test-analysis":
                 case "analyze":
@@ -308,7 +308,7 @@ public class Program
         }
     }
 
-    private static async Task RunCreateAnalyzerAsync(IServiceProvider serviceProvider, string analyzerFile = "")
+    private static async Task RunCreateAnalyzerAsync(IServiceProvider serviceProvider, string analyzername, string analyzerFile)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -318,84 +318,22 @@ public class Program
 
         try
         {
-            // Get available analyzers from JSON files
-            var availableAnalyzers = SampleAnalyzers.GetAvailableAnalyzers();
-            
-            if (availableAnalyzers.Count == 0)
-            {
-                logger.LogWarning("⚠️ No analyzer JSON files found in Data folder");
-                return;
-            }
-
-            string targetAnalyzer;
-            string analyzerName;
-            string fileName;
-
-            // If specific analyzer file is provided, use it
-            if (!string.IsNullOrEmpty(analyzerFile))
-            {
-                // Check if the specified file exists in available analyzers
-                var matchingAnalyzer = availableAnalyzers.FirstOrDefault(a => 
-                    a.Value.Equals(analyzerFile, StringComparison.OrdinalIgnoreCase) ||
-                    a.Key.Equals(analyzerFile, StringComparison.OrdinalIgnoreCase) ||
-                    a.Value.Contains(analyzerFile, StringComparison.OrdinalIgnoreCase));
-
-                if (matchingAnalyzer.Key != null)
-                {
-                    analyzerName = matchingAnalyzer.Key;
-                    fileName = matchingAnalyzer.Value;
-                    targetAnalyzer = fileName;
-                    logger.LogInformation("🎯 Using specified analyzer: {AnalyzerFile}", analyzerFile);
-                }
-                else
-                {
-                    logger.LogError("❌ Analyzer file '{AnalyzerFile}' not found in available analyzers", analyzerFile);
-                    logger.LogInformation("📂 Available analyzers:");
-                    foreach (var analyzer in availableAnalyzers)
-                    {
-                        logger.LogInformation("   • {Name} (from {FileName})", analyzer.Key, analyzer.Value);
-                    }
-                    return;
-                }
-            }
-            else
-            {
-                // Default behavior - show available and use receipt or first available
-                logger.LogInformation("📂 Available analyzers:");
-                foreach (var analyzer in availableAnalyzers)
-                {
-                    logger.LogInformation("   • {Name} (from {FileName})", analyzer.Key, analyzer.Value);
-                }
-                logger.LogInformation("");
-
-                // Try to create the receipt analyzer specifically, or fall back to first available
-                targetAnalyzer = availableAnalyzers.ContainsKey("receipt") 
-                    ? availableAnalyzers["receipt"] 
-                    : availableAnalyzers.First().Value;
-                analyzerName = availableAnalyzers.ContainsKey("receipt") 
-                    ? "receipt" 
-                    : availableAnalyzers.First().Key;
-                fileName = targetAnalyzer;
-            }
-
-            logger.LogInformation("🔄 Loading analyzer definition: {FileName}", fileName);
-            
-            var jsonContent = await SampleAnalyzers.LoadAnalyzerJsonAsync(fileName);
+            var jsonContent = await SampleAnalyzers.LoadAnalyzerJsonAsync(analyzerFile);
             
             // Validate the JSON
             if (!SampleAnalyzers.ValidateAnalyzerJson(jsonContent))
             {
-                logger.LogError("❌ Invalid analyzer JSON format in file: {FileName}", fileName);
+                logger.LogError("❌ Invalid analyzer JSON format in file: {FileName}", analyzername);
                 return;
             }
 
             logger.LogInformation("✅ JSON validation passed");
-            logger.LogInformation("🚀 Creating analyzer: {AnalyzerName}", analyzerName);
+            logger.LogInformation("🚀 Creating analyzer: {AnalyzerName}", analyzername);
 
             // Create the analyzer using the Content Understanding service
-            var result = await contentUnderstandingService.CreateOrUpdateAnalyzerAsync(analyzerName, jsonContent);
+            var result = await contentUnderstandingService.CreateOrUpdateAnalyzerAsync(analyzername, jsonContent);
             
-            logger.LogInformation("✅ Successfully created analyzer: {AnalyzerName}", analyzerName);
+            logger.LogInformation("✅ Successfully created analyzer: {AnalyzerName}", analyzername);
             logger.LogDebug("API Response: {Result}", result);
         }
         catch (FileNotFoundException ex)

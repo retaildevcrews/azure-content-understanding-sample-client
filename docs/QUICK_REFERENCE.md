@@ -21,6 +21,15 @@ dotnet run -- --mode check-operation --operation-id your-operation-id-here
 
 ## 📋 Common CLI Patterns
 
+### Analyzer Management
+```bash
+# List all analyzers
+dotnet run -- --mode analyzers
+
+# Create analyzer from schema file
+dotnet run -- --mode create-analyzer --analyzer receipt --analyzer-file receipt.json
+```
+
 ### Document Analysis
 ```bash
 # Quick analysis with smart defaults
@@ -35,16 +44,6 @@ dotnet run -- --mode analyze --analyzer enginemanual
 
 # Full control - specify both
 dotnet run -- --mode analyze --analyzer receipt --document receipt.png
-```
-
-### Analyzer Management
-```bash
-# List all analyzers
-dotnet run -- --mode analyzers
-
-# Create analyzer from schema file
-dotnet run -- --mode create-analyzer --analyzer-file receipt.json
-dotnet run -- --mode create --analyzer-file enginemanual  # Partial names work
 ```
 
 ### Operation Management
