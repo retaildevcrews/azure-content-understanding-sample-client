@@ -2,6 +2,7 @@ using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -267,7 +268,7 @@ public class ContentUnderstandingService
     /// <summary>
     /// Submits a document for analysis
     /// </summary>
-    public async Task<string> AnalyzeDocumentAsync(string analyzerName, byte[] documentData, string contentType)
+    public async Task<(string responseContent, string operationLocation)> AnalyzeDocumentAsync(string analyzerName, byte[] documentData, string contentType)
     {
         if (string.IsNullOrEmpty(analyzerName))
             throw new ArgumentException("Analyzer name cannot be null or empty", nameof(analyzerName));
@@ -296,7 +297,15 @@ public class ContentUnderstandingService
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("✅ Successfully submitted document for analysis with analyzer: {AnalyzerName}", analyzerName);
-                return responseContent;
+                
+                // Get the Operation-Location header for polling
+                var operationLocation = response.Headers.Location?.ToString() ?? 
+                                      (response.Headers.Contains("Operation-Location") ? 
+                                       response.Headers.GetValues("Operation-Location").FirstOrDefault() : null);
+                
+                _logger.LogDebug("Operation-Location header: {OperationLocation}", operationLocation);
+                
+                return (responseContent, operationLocation);
             }
             else
             {
@@ -353,6 +362,49 @@ public class ContentUnderstandingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting analysis result for operation: {OperationId}", operationId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Gets the result of a previously submitted analysis operation using the operation location URL
+    /// </summary>
+    public async Task<string> GetAnalysisResultByLocationAsync(string operationLocationUrl)
+    {
+        if (string.IsNullOrEmpty(operationLocationUrl))
+            throw new ArgumentException("Operation location URL cannot be null or empty", nameof(operationLocationUrl));
+
+        _logger.LogInformation("📊 Getting analysis result from operation location: {OperationLocation}", operationLocationUrl);
+        
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            
+            _logger.LogDebug("GET {Url}", operationLocationUrl);
+            
+            var response = await _httpClient.GetAsync(operationLocationUrl);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully retrieved analysis result from operation location");
+                return responseContent;
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("⚠️ Operation not found at location: {OperationLocation}", operationLocationUrl);
+                throw new InvalidOperationException($"Operation not found at location: {operationLocationUrl}");
+            }
+            else
+            {
+                _logger.LogError("❌ Failed to get analysis result from location {OperationLocation}. Status: {StatusCode}, Response: {Response}", 
+                    operationLocationUrl, response.StatusCode, responseContent);
+                throw new HttpRequestException($"Failed to get analysis result from location '{operationLocationUrl}': {response.StatusCode} - {responseContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting analysis result from operation location: {OperationLocation}", operationLocationUrl);
             throw;
         }
     }

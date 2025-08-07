@@ -301,30 +301,24 @@ public class Program
                 "application/pdf");
 
             logger.LogInformation("✅ Document analysis submitted successfully!");
-            logger.LogInformation("📊 Analysis Result: {Result}", analysisResult);
+            logger.LogInformation("📊 Analysis Result: {Result}", analysisResult.responseContent);
 
-            // Parse the operation ID from the response to poll for results
-            try
+            // Check if we got an operation location URL for polling
+            if (!string.IsNullOrEmpty(analysisResult.operationLocation))
             {
-                var analysisResponse = System.Text.Json.JsonDocument.Parse(analysisResult);
-                var operationId = analysisResponse.RootElement.GetProperty("id").GetString();
-                var status = analysisResponse.RootElement.GetProperty("status").GetString();
-
-                logger.LogInformation("🔄 Operation ID: {OperationId}", operationId);
-                logger.LogInformation("📊 Current Status: {Status}", status);
-
-                if (!string.IsNullOrEmpty(operationId))
+                logger.LogInformation("🔄 Operation Location: {OperationLocation}", analysisResult.operationLocation);
+                logger.LogInformation("⏳ Polling for analysis results...");
+                
+                // Poll for results using the operation location URL
+                for (int attempt = 1; attempt <= 10; attempt++)
                 {
-                    logger.LogInformation("⏳ Polling for analysis results...");
+                    await Task.Delay(3000); // Wait 3 seconds between polls
                     
-                    // Poll for results (simple approach with a few attempts)
-                    for (int attempt = 1; attempt <= 10; attempt++)
+                    logger.LogInformation("🔄 Polling attempt {Attempt}/10...", attempt);
+                    
+                    try
                     {
-                        await Task.Delay(3000); // Wait 3 seconds between polls
-                        
-                        logger.LogInformation("🔄 Polling attempt {Attempt}/10...", attempt);
-                        
-                        var resultResponse = await contentUnderstandingService.GetAnalysisResultAsync(operationId);
+                        var resultResponse = await contentUnderstandingService.GetAnalysisResultByLocationAsync(analysisResult.operationLocation);
                         var resultDoc = System.Text.Json.JsonDocument.Parse(resultResponse);
                         var currentStatus = resultDoc.RootElement.GetProperty("status").GetString();
                         
@@ -347,11 +341,31 @@ public class Program
                             logger.LogInformation("⏳ Analysis still in progress...");
                         }
                     }
+                    catch (Exception pollEx)
+                    {
+                        logger.LogError(pollEx, "❌ Error during polling attempt {Attempt}", attempt);
+                        if (attempt == 10) // Last attempt
+                        {
+                            logger.LogError("❌ Failed to get results after 10 attempts");
+                        }
+                    }
                 }
             }
-            catch (Exception parseEx)
+            else
             {
-                logger.LogError(parseEx, "❌ Failed to parse analysis response for polling");
+                logger.LogWarning("⚠️ No Operation-Location header received. Cannot poll for results.");
+                // Fallback: try to parse the operation ID from the response content
+                try
+                {
+                    var analysisResponse = System.Text.Json.JsonDocument.Parse(analysisResult.responseContent);
+                    var operationId = analysisResponse.RootElement.GetProperty("id").GetString();
+                    logger.LogInformation("🔄 Fallback: Found Operation ID in response: {OperationId}", operationId);
+                    logger.LogInformation("💡 Consider checking the Azure portal or using the original GetAnalysisResultAsync method");
+                }
+                catch (Exception parseEx)
+                {
+                    logger.LogError(parseEx, "❌ Could not parse operation ID from response");
+                }
             }
         }
         catch (FileNotFoundException ex)
