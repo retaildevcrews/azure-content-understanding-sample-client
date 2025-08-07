@@ -20,6 +20,13 @@ public class ContentUnderstandingService
     private readonly DefaultAzureCredential _credential;
     private string? _cachedApiKey;
 
+    // API Constants
+    private const string API_BASE_PATH = "/contentunderstanding";
+    private const string API_VERSION = "2025-05-01-preview";
+    private const string ANALYZERS_PATH = "/analyzers";
+    private const string OPERATIONS_PATH = "/operations";
+    private const string ANALYZE_ACTION = ":analyze";
+
     public ContentUnderstandingService(
         IConfiguration configuration, 
         ILogger<ContentUnderstandingService> logger)
@@ -98,6 +105,23 @@ public class ContentUnderstandingService
     }
 
     /// <summary>
+    /// Builds a complete API URL with consistent formatting
+    /// </summary>
+    private string BuildApiUrl(string path, bool includeApiVersion = true)
+    {
+        var endpoint = GetEndpoint();
+        var url = $"{endpoint}{API_BASE_PATH}{path}";
+        
+        if (includeApiVersion)
+        {
+            var separator = path.Contains('?') ? "&" : "?";
+            url += $"{separator}api-version={API_VERSION}";
+        }
+        
+        return url;
+    }
+
+    /// <summary>
     /// Lists all analyzers in the Content Understanding service
     /// </summary>
     public async Task<string> ListAnalyzersAsync()
@@ -107,9 +131,8 @@ public class ContentUnderstandingService
         try
         {
             await ConfigureAuthenticationAsync();
-            var endpoint = GetEndpoint();
             
-            var url = $"{endpoint}/contentunderstanding/analyzers?api-version=2025-05-01-preview";
+            var url = BuildApiUrl(ANALYZERS_PATH);
             _logger.LogDebug("GET {Url}", url);
             
             var response = await _httpClient.GetAsync(url);
@@ -147,9 +170,8 @@ public class ContentUnderstandingService
         try
         {
             await ConfigureAuthenticationAsync();
-            var endpoint = GetEndpoint();
             
-            var url = $"{endpoint}/contentunderstanding/analyzers/{Uri.EscapeDataString(analyzerName)}?api-version=2025-05-01-preview";
+            var url = BuildApiUrl($"{ANALYZERS_PATH}/{Uri.EscapeDataString(analyzerName)}");
             _logger.LogDebug("GET {Url}", url);
             
             var response = await _httpClient.GetAsync(url);
@@ -194,9 +216,8 @@ public class ContentUnderstandingService
         try
         {
             await ConfigureAuthenticationAsync();
-            var endpoint = GetEndpoint();
             
-            var url = $"{endpoint}/contentunderstanding/analyzers/{Uri.EscapeDataString(analyzerName)}?api-version=2025-05-01-preview";
+            var url = BuildApiUrl($"{ANALYZERS_PATH}/{Uri.EscapeDataString(analyzerName)}");
             _logger.LogDebug("PUT {Url}", url);
             
             var requestContent = new StringContent(schemaJson, Encoding.UTF8, "application/json");
@@ -235,9 +256,8 @@ public class ContentUnderstandingService
         try
         {
             await ConfigureAuthenticationAsync();
-            var endpoint = GetEndpoint();
             
-            var url = $"{endpoint}/contentunderstanding/analyzers/{Uri.EscapeDataString(analyzerName)}?api-version=2025-05-01-preview";
+            var url = BuildApiUrl($"{ANALYZERS_PATH}/{Uri.EscapeDataString(analyzerName)}");
             _logger.LogDebug("DELETE {Url}", url);
             
             var response = await _httpClient.DeleteAsync(url);
@@ -283,9 +303,8 @@ public class ContentUnderstandingService
         try
         {
             await ConfigureAuthenticationAsync();
-            var endpoint = GetEndpoint();
             
-            var url = $"{endpoint}/contentunderstanding/analyzers/{Uri.EscapeDataString(analyzerName)}:analyze?api-version=2025-05-01-preview";
+            var url = BuildApiUrl($"{ANALYZERS_PATH}/{Uri.EscapeDataString(analyzerName)}{ANALYZE_ACTION}");
             _logger.LogDebug("POST {Url}", url);
             
             var requestContent = new ByteArrayContent(documentData);
@@ -334,9 +353,8 @@ public class ContentUnderstandingService
         try
         {
             await ConfigureAuthenticationAsync();
-            var endpoint = GetEndpoint();
             
-            var url = $"{endpoint}/contentunderstanding/operations/{Uri.EscapeDataString(operationId)}?api-version=2025-05-01-preview";
+            var url = BuildApiUrl($"{OPERATIONS_PATH}/{Uri.EscapeDataString(operationId)}");
             _logger.LogDebug("GET {Url}", url);
             
             var response = await _httpClient.GetAsync(url);
