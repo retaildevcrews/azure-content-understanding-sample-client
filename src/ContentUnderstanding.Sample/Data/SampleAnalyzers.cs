@@ -37,8 +37,10 @@ public static class SampleAnalyzers
             var root = document.RootElement;
 
             // Check for required properties
-            return root.TryGetProperty("description", out _) &&
-                   root.TryGetProperty("baseAnalyzerId", out _) &&
+            //return root.TryGetProperty("description", out _) &&
+            //       root.TryGetProperty("baseAnalyzerId", out _) &&
+            //       root.TryGetProperty("fieldSchema", out _);
+            return root.TryGetProperty("baseAnalyzerId", out _) &&
                    root.TryGetProperty("fieldSchema", out _);
         }
         catch (JsonException)

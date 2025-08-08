@@ -1,0 +1,224 @@
+{
+  "description": "Sample engine manual analyzer",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "mode": "pro",
+  "processingLocation": "global",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "tableFormat": "html"
+  },
+	"fieldSchema": {
+		"fields": {
+			"ModelNumber": {
+				"type": "string",
+				"method": "extract",
+				"description": "The model number of the lawn mower"
+			},
+			"SerialNumber": {
+				"type": "string",
+				"method": "extract",
+				"description": "The serial number of the lawn mower"
+			},
+			"ProductType": {
+				"type": "string",
+				"method": "extract",
+				"description": "The type of product described in the manual"
+			},
+			"IntendedUse": {
+				"type": "string",
+				"method": "extract",
+				"description": "The intended use of the lawn mower as described in the manual"
+			},
+			"SafetyAlertSymbol": {
+				"type": "string",
+				"method": "extract",
+				"description": "Symbol used to signal a hazard that may cause serious injury or death"
+			},
+			"Website": {
+				"type": "string",
+				"method": "extract",
+				"description": "Website for more information, safety tips, and product registration"
+			},
+			"ServiceContact": {
+				"type": "string",
+				"method": "extract",
+				"description": "Contact information for service, parts, or additional information"
+			},
+			"EnvironmentalNote": {
+				"type": "string",
+				"method": "extract",
+				"description": "Environmental note regarding the side-discharge chute"
+			},
+			"CaliforniaRegulation": {
+				"type": "string",
+				"method": "extract",
+				"description": "California Public Resource Code regulation regarding engine use"
+			},
+			"EngineManualInfo": {
+				"type": "string",
+				"method": "extract",
+				"description": "Information regarding the engine owner's manual and emission control"
+			},
+			"CompanyAddress": {
+				"type": "string",
+				"method": "extract",
+				"description": "Address of Lawn-Boy Inc."
+			},
+			"Warning": {
+				"type": "string",
+				"method": "extract",
+				"description": "California Proposition 65 warning about chemicals in the engine exhaust that may cause cancer, birth defects, or other reproductive harm"
+			},
+			"SafetyStandard": {
+				"type": "string",
+				"method": "extract",
+				"description": "Safety standard that the machine complies with"
+			},
+			"GeneralSafetyInstructions": {
+				"type": "string",
+				"method": "extract",
+				"description": "General safety instructions to prevent injury while using the machine"
+			},
+			"ManufacturerMark": {
+				"type": "string",
+				"method": "extract",
+				"description": "Indicates that the blade is identified as a part from the original machine manufacturer"
+			},
+			"DangerDecal": {
+				"type": "string",
+				"method": "extract",
+				"description": "Warning to keep hands and feet away from the machine"
+			},
+			"WarningDecal": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"WarningId": {
+							"type": "string",
+							"method": "extract",
+							"description": "Identifier for the warning decal"
+						},
+						"WarningText": {
+							"type": "string",
+							"method": "extract",
+							"description": "Text of the warning message"
+						}
+					},
+					"description": "Warning details"
+				},
+				"description": "List of warnings related to the operation and maintenance of the machine"
+			},
+			"CaliforniaWarning": {
+				"type": "string",
+				"method": "extract",
+				"description": "Warning about cancer and reproductive harm specific to California regulations"
+			},
+			"SparkArresterWarning": {
+				"type": "string",
+				"method": "extract",
+				"description": "Warning about the potential for sparks that can start fires and the need for a spark arrester"
+			},
+			"OilType": {
+				"type": "string",
+				"method": "extract",
+				"description": "The viscosity or oil type description for the engine"
+			},
+			"FuelCapacity": {
+				"type": "number",
+				"method": "extract",
+				"description": "Capacity of fuel or gas tank in gallons or liters or ounces"
+			},
+			"OilCapacity": {
+				"type": "number",
+				"method": "extract",
+				"description": "Engine oil capacity in Liters (l) or Ounces (oz)"
+			},
+			"Troubleshooting": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"ProblemDescription": {
+							"type": "string",
+							"method": "extract",
+							"description": "Description of the problem, like the engine fails to start"
+						},
+						"Symptom": {
+							"type": "string",
+							"method": "extract",
+							"description": "Symptom or how the problem presents to the consumer or user"
+						},
+						"Solution": {
+							"type": "string",
+							"method": "extract",
+							"description": "Suggested potential fix or solution to the problem"
+						}
+					},
+					"method": "extract"
+				},
+				"method": "generate",
+				"description": "List of typical problems and how to troubleshoot and fix"
+			},
+			"FuelCapacityDesc": {
+				"type": "string",
+				"method": "extract",
+				"description": "Full text description of the capacity of the fuel or gas tank"
+			},
+			"OilCapacityDesc": {
+				"type": "string",
+				"method": "extract",
+				"description": "Full text description of the engine oil capacity"
+			},
+			"FuelCapacityType": {
+				"type": "string",
+				"method": "extract",
+				"description": "The unit of measurement of the fuel capacity, such as gallons or ounces"
+			},
+			"OilCapacityType": {
+				"type": "string",
+				"method": "extract",
+				"description": "The unit of measurement of the engine oil capacity, like Liters or Ounces"
+			},
+            "OilCapacityProperties": {
+                "type": "array",
+                "method": "generate",
+                "description": "List all properties of the oil capacity of the engine",
+                "items": {
+                    "$ref": "#/$defs/OilCapacityObject"
+                }
+            }			
+		},
+        "definitions": {
+            "OilCapacityObject": {
+                "type": "object",
+                "method": "generate",
+                "description": "Object representing the oil capacity properties of the engine.",
+                "properties": {
+                    "PrimaryCapacity": {
+                        "type": "number",
+                        "method": "extract",
+                        "description": "The primary oil capacity value, typically an integer or decimal"
+                    },
+                    "PrimaryUnit": {
+                        "type": "string",
+                        "method": "extract",
+                        "description": "The unit of measurement associated with the primary oil capacity, such as quarts, liters, or ounces."
+                    },
+                    "SecondaryCapacity": {
+                        "type": "number",
+                        "method": "extract",
+                        "description": "The secondary oil capacity value if the capacity is defined in more than one way. Typically an integer or decimal"
+                    },
+                    "SecondaryUnit": {
+                        "type": "string",
+                        "method": "extract",
+                        "description": "The unit of measurement associated with the secondary oil capacity, such as quarts, liters, or ounces."
+                    }					
+                }
+            }
+        }
+	}
+}
