@@ -4,7 +4,7 @@ A comprehensive .NET 8 sample application demonstrating Azure Content Understand
 
 ## 🚀 Features
 
-- ✅ **Complete Azure Content Understa💾 Complete results saved to output files for detailed review.
+- ✅ **Complete Azure Content Understaing Complete results saved to output files for detailed review.
 📁 Results saved to:
     📄 Raw JSON: Output\receipt_069e39de-5132-425d-87b7_2025-08-07_09-46-09_results.json
     📋 Formatted: Output\receipt_069e39de-5132-425d-87b7_2025-08-07_09-46-09_formatted.txtg API integration** with authentication and URL constants
@@ -286,7 +286,7 @@ Output:
 ```
 azure-ai-content-understanding-basic/
 ├── src/                                    # Source code
-│   ├── ContentUnderstanding.Sample/       # Main console application
+│   ├── ContentUnderstanding.Client/       # Main console application
 │   │   ├── Program.cs                     # Main entry point with parameterized CLI
 │   │   ├── Services/                      # HTTP service layer
 │   │   │   ├── ContentUnderstandingService.cs  # API client with auth
@@ -303,9 +303,10 @@ azure-ai-content-understanding-basic/
 │   │   ├── Output/                        # Analysis results export (git-ignored)
 │   │   │   ├── *_results.json             # Raw JSON results with timestamps
 │   │   │   └── *_formatted.txt            # Human-readable formatted results
-│   │   └── appsettings.json              # Configuration
-│   └── ContentUnderstanding.Models/       # Cleaned analyzer definition models (2 essential classes)
-│       └── ContentUnderstandingModels.cs  # AnalyzerDefinition & FieldDefinition only
+│   │   └── appsettings.json               # Configuration
+│   └── ContentUnderstanding.Client/
+│       └── Models/
+│           └── ContentUnderstandingModels.cs  # AnalyzerDefinition & FieldDefinition only
 ├── iac/                                   # Infrastructure as Code (Terraform)
 │   ├── main.tf                           # Main infrastructure definition
 │   ├── variables.tf                      # Input parameters
@@ -361,7 +362,7 @@ The application uses **DefaultAzureCredential** for authentication, supporting:
 ContentUnderstandingSample/
 ├── src/
 │   ├── ContentUnderstanding.Sample/          # Main console app with HTTP services
-│   └── ContentUnderstanding.Models/          # Shared request/response models
+│   └── ContentUnderstanding.Sample/Models/   # Shared request/response models
 ├── iac/                                       # Infrastructure as Code (Terraform)
 │   ├── main.tf
 │   ├── variables.tf
@@ -391,9 +392,9 @@ ContentUnderstandingSample/
    ./iac/deploy.sh
    ```
 
-2. **Run the Sample**:
+2. **Run the Client**:
    ```bash
-   cd src/ContentUnderstanding.Sample
+  cd src/ContentUnderstanding.Client
    dotnet run
    ```
 

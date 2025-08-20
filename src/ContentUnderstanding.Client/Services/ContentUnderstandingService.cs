@@ -50,6 +50,82 @@ public class ContentUnderstandingService
     }
 
     /// <summary>
+    /// Polls an operation location until completion or timeout.
+    /// Returns the final operation payload when status == "Succeeded".
+    /// Throws TimeoutException on timeout and InvalidOperationException if the operation fails.
+    /// </summary>
+    public async Task<JsonDocument> PollResultAsync(
+        string operationLocation,
+        int timeoutSeconds = 1200,
+        int pollingIntervalSeconds = 5,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(operationLocation))
+            throw new ArgumentException("Operation location cannot be null or empty", nameof(operationLocation));
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+        var startTime = DateTime.UtcNow;
+        while (!cts.IsCancellationRequested)
+        {
+            try
+            {
+                var responseText = await GetAnalysisResultByLocationAsync(operationLocation);
+                var doc = JsonDocument.Parse(responseText);
+                if (doc.RootElement.TryGetProperty("status", out var statusProp))
+                {
+                    var status = statusProp.GetString();
+                    if (string.Equals(status, "Succeeded", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation("Analysis Succeeded after {Elapsed:mm\\:ss}", DateTime.UtcNow - startTime);
+                        return doc;
+                    }
+                    if (string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string message = "Operation failed";
+                        try
+                        {
+                            if (doc.RootElement.TryGetProperty("error", out var error))
+                            {
+                                var code = error.TryGetProperty("code", out var c) ? c.GetString() : null;
+                                var msg = error.TryGetProperty("message", out var m) ? m.GetString() : null;
+                                message = $"Operation failed. Code: {code ?? "Unknown"}, Message: {msg ?? "None"}";
+                            }
+                        }
+                        catch { /* ignore detail extraction issues */ }
+                        throw new InvalidOperationException(message);
+                    }
+                }
+
+                // Still running or unknown status: wait and poll again
+                _logger.LogInformation("Polling... status: {Status}", doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : "Unknown");
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Log and continue polling on transient errors
+                _logger.LogWarning(ex, "Polling error; will retry in {DelaySeconds}s", pollingIntervalSeconds);
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(pollingIntervalSeconds), cts.Token);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+
+        var opId = operationLocation.Split('/').LastOrDefault() ?? "unknown";
+        throw new TimeoutException($"Polling timed out after {timeoutSeconds}s for operation {opId}.");
+    }
+
+    /// <summary>
     /// Gets the API key from Key Vault with caching
     /// </summary>
     private async Task<string> GetApiKeyAsync()
@@ -324,7 +400,7 @@ public class ContentUnderstandingService
                 
                 _logger.LogDebug("Operation-Location header: {OperationLocation}", operationLocation);
                 
-                return (responseContent, operationLocation);
+                return (responseContent, operationLocation ?? string.Empty);
             }
             else
             {

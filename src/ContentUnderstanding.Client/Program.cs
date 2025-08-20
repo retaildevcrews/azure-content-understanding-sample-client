@@ -381,23 +381,6 @@ public class Program
                 {
                     logger.LogError("❌ Specified document not found: {FilePath}", targetDocumentPath);
                     
-                    // Show available documents
-                    if (Directory.Exists(sampleDocumentsPath))
-                    {
-                        var availableDocs = Directory.GetFiles(sampleDocumentsPath, "*.*")
-                            .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".pdf" or ".png" or ".jpg" or ".jpeg" or ".tiff" or ".bmp")
-                            .Select(Path.GetFileName)
-                            .ToArray();
-                        
-                        if (availableDocs.Any())
-                        {
-                            logger.LogInformation("📄 Available documents in Data/SampleDocuments:");
-                            foreach (var doc in availableDocs)
-                            {
-                                logger.LogInformation("   • {DocumentName}", doc);
-                            }
-                        }
-                    }
                     return;
                 }
             }
@@ -411,25 +394,6 @@ public class Program
                 {
                     logger.LogError("❌ Default document not found: {FilePath}", targetDocumentPath);
                     
-                    // Show available documents
-                    if (Directory.Exists(sampleDocumentsPath))
-                    {
-                        var availableDocs = Directory.GetFiles(sampleDocumentsPath, "*.*")
-                            .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".pdf" or ".png" or ".jpg" or ".jpeg" or ".tiff" or ".bmp")
-                            .Select(Path.GetFileName)
-                            .ToArray();
-                        
-                        if (availableDocs.Any())
-                        {
-                            logger.LogInformation("📄 Available documents in Data/SampleDocuments:");
-                            foreach (var doc in availableDocs)
-                            {
-                                logger.LogInformation("   • {DocumentName}", doc);
-                            }
-                            logger.LogInformation("");
-                            logger.LogInformation("� Use --document <filename> to specify a different document");
-                        }
-                    }
                     return;
                 }
             }
@@ -468,15 +432,9 @@ public class Program
                         targetAnalyzer = "receipt";
                         logger.LogInformation("🔧 Using default analyzer: receipt");
                     }
-                    else if (availableAnalyzerNames.Any())
-                    {
-                        targetAnalyzer = availableAnalyzerNames.First();
-                        logger.LogInformation("🔧 Using first available analyzer: {AnalyzerName}", targetAnalyzer);
-                        logger.LogInformation("💡 Available analyzers: {Analyzers}", string.Join(", ", availableAnalyzerNames));
-                    }
                     else
                     {
-                        logger.LogError("❌ No analyzers found. Please create an analyzer first with --mode create-analyzer");
+                        logger.LogError("❌ Default analyzer not found. Please create an analyzer first with --mode create-analyzer");
                         return;
                     }
                 }
@@ -516,135 +474,71 @@ public class Program
             {
                 logger.LogInformation("🔄 Operation Location: {OperationLocation}", analysisResult.operationLocation);
                 logger.LogInformation("⏳ Polling for analysis results (up to 20 minutes)...");
-                
-                // Poll for results using the operation location URL with extended timeout
-                var startTime = DateTime.UtcNow;
-                var maxDuration = TimeSpan.FromMinutes(20); // Extended to 20 minutes
-                int attempt = 1;
-                
-                while (DateTime.UtcNow - startTime < maxDuration)
+
+                try
                 {
-                    // Use progressive backoff: start with 10s, then increase gradually up to 30s max
-                    int delaySeconds = Math.Min(10 + (attempt - 1) * 5, 30);
-                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
-                    
-                    logger.LogInformation("🔄 Polling attempt {Attempt} (elapsed: {Elapsed:mm\\:ss}, next check in {Delay}s)...", 
-                        attempt, DateTime.UtcNow - startTime, delaySeconds);
-                    
+                    var resultDoc = await contentUnderstandingService.PollResultAsync(
+                        analysisResult.operationLocation,
+                        timeoutSeconds: 1200,
+                        pollingIntervalSeconds: 5);
+
+                    var resultResponse = resultDoc.RootElement.GetRawText();
+
+                    // Display results summary instead of full JSON
+                    logger.LogInformation("📋 Analysis Results Summary:");
                     try
                     {
-                        var resultResponse = await contentUnderstandingService.GetAnalysisResultByLocationAsync(analysisResult.operationLocation);
-                        var resultDoc = System.Text.Json.JsonDocument.Parse(resultResponse);
-                        var currentStatus = resultDoc.RootElement.GetProperty("status").GetString();
-                        
-                        logger.LogInformation("📊 Status: {Status}", currentStatus);
-                        
-                        if (currentStatus == "Succeeded")
+                        // The structure is: result -> contents[0] -> fields
+                        if (resultDoc.RootElement.TryGetProperty("result", out var result) &&
+                            result.TryGetProperty("contents", out var contents) &&
+                            contents.GetArrayLength() > 0)
                         {
-                            logger.LogInformation("🎉 Analysis completed successfully in {Elapsed:mm\\:ss}!", 
-                                DateTime.UtcNow - startTime);
-                            
-                            // Display results summary instead of full JSON
-                            logger.LogInformation("📋 Analysis Results Summary:");
-                            try
+                            var firstContent = contents[0];
+                            if (firstContent.TryGetProperty("fields", out var fields))
                             {
-                                var analysisDoc = System.Text.Json.JsonDocument.Parse(resultResponse);
-                                
-                                // The structure is: result -> contents[0] -> fields
-                                if (analysisDoc.RootElement.TryGetProperty("result", out var result) &&
-                                    result.TryGetProperty("contents", out var contents) &&
-                                    contents.GetArrayLength() > 0)
+                                foreach (var field in fields.EnumerateObject())
                                 {
-                                    var firstContent = contents[0];
-                                    if (firstContent.TryGetProperty("fields", out var fields))
-                                    {
-                                        foreach (var field in fields.EnumerateObject())
-                                        {
-                                            var fieldValue = ExtractFieldValue(field.Value);
-                                            logger.LogInformation("  • {FieldName}: {FieldValue}", field.Name, fieldValue);
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    logger.LogInformation("  ✅ Document processed successfully, but no specific fields were extracted");
-                                    logger.LogInformation("  💡 This might be normal depending on the analyzer schema");
-                                }
-                                
-                                // Extract operation ID for reference
-                                var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                                logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
-                                
-                                // Export results to files
-                                await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
-                            }
-                            catch (Exception parseEx)
-                            {
-                                logger.LogWarning("⚠️ Could not parse results summary: {Message}", parseEx.Message);
-                                logger.LogDebug(parseEx, "Full parsing exception");
-                                logger.LogInformation("📋 Operation completed successfully - raw results available via API");
-                                
-                                // Still try to export raw results
-                                var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                                await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
-                            }
-                            break;
-                        }
-                        else if (currentStatus == "Failed")
-                        {
-                            logger.LogError("❌ Analysis failed after {Elapsed:mm\\:ss}", DateTime.UtcNow - startTime);
-                            
-                            // Try to extract error details
-                            try
-                            {
-                                if (resultDoc.RootElement.TryGetProperty("error", out var error))
-                                {
-                                    var errorCode = error.TryGetProperty("code", out var code) ? code.GetString() : "Unknown";
-                                    var errorMessage = error.TryGetProperty("message", out var message) ? message.GetString() : "No details available";
-                                    logger.LogError("❌ Error Code: {ErrorCode}", errorCode);
-                                    logger.LogError("❌ Error Message: {ErrorMessage}", errorMessage);
-                                }
-                                else
-                                {
-                                    logger.LogInformation("📋 Full Error Response: {Results}", resultResponse);
+                                    var fieldValue = ExtractFieldValue(field.Value);
+                                    logger.LogInformation("  • {FieldName}: {FieldValue}", field.Name, fieldValue);
                                 }
                             }
-                            catch
-                            {
-                                logger.LogInformation("📋 Error Details: {Results}", resultResponse);
-                            }
-                            break;
-                        }
-                        else if (currentStatus == "Running" || currentStatus == "NotStarted")
-                        {
-                            logger.LogInformation("⏳ Analysis still in progress...");
                         }
                         else
                         {
-                            logger.LogWarning("⚠️ Unknown status: {Status} - continuing to poll", currentStatus);
+                            logger.LogInformation("  ✅ Document processed successfully, but no specific fields were extracted");
+                            logger.LogInformation("  💡 This might be normal depending on the analyzer schema");
                         }
+
+                        // Extract operation ID for reference
+                        var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
+                        logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
+
+                        // Export results to files
+                        await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
                     }
-                    catch (Exception pollEx)
+                    catch (Exception parseEx)
                     {
-                        logger.LogError("❌ Error during polling attempt {Attempt}: {Message}", attempt, pollEx.Message);
-                        logger.LogDebug(pollEx, "Polling exception details");
-                        
-                        // Don't break on individual polling errors, continue trying
-                        logger.LogInformation("🔄 Continuing to poll despite error...");
+                        logger.LogWarning("⚠️ Could not parse results summary: {Message}", parseEx.Message);
+                        logger.LogDebug(parseEx, "Full parsing exception");
+                        logger.LogInformation("📋 Operation completed successfully - raw results available via API");
+
+                        // Still try to export raw results
+                        var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
+                        await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
                     }
-                    
-                    attempt++;
                 }
-                
-                // Check if we timed out
-                if (DateTime.UtcNow - startTime >= maxDuration)
+                catch (TimeoutException tex)
                 {
                     var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                    logger.LogWarning("⏰ Polling timeout after 20 minutes. Operation may still be processing.");
-                    logger.LogInformation("💡 Operation ID: {OperationId}", operationId);
-                    logger.LogInformation("💡 You can check the status later using:");
+                    logger.LogWarning("⏰ {Message}", tex.Message);
+                    logger.LogInformation("� Operation ID: {OperationId}", operationId);
+                    logger.LogInformation("� You can check the status later using:");
                     logger.LogInformation("    dotnet run -- --mode check-operation --operation-id {OperationId}", operationId);
-                    logger.LogInformation("💡 Or check the Azure portal for completion status.");
+                    logger.LogInformation("� Or check the Azure portal for completion status.");
+                }
+                catch (InvalidOperationException ioex)
+                {
+                    logger.LogError("❌ Analysis failed: {Message}", ioex.Message);
                 }
             }
             else
