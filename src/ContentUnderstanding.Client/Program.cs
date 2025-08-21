@@ -44,6 +44,9 @@ public class Program
             var analyzerName = GetArgumentValue(args, "--analyzer", "");
             var documentFile = GetArgumentValue(args, "--document", "");
             var operationId = GetArgumentValue(args, "--operation-id", "");
+            var classifierFile = GetArgumentValue(args, "--classifier-file", "");
+            var classifierName = GetArgumentValue(args, "--classifier", "");
+            var text = GetArgumentValue(args, "--text", "");
             
             switch (mode.ToLowerInvariant())
             {
@@ -66,6 +69,17 @@ public class Program
                 case "check-operation":
                 case "operation":
                     await RunCheckOperationAsync(serviceProvider, operationId);
+                    break;
+                case "classifiers":
+                case "list-classifiers":
+                    await RunListClassifiersAsync(serviceProvider);
+                    break;
+                case "create-classifier":
+                case "create-clf":
+                    await RunCreateClassifierAsync(serviceProvider, classifierName, classifierFile);
+                    break;
+                case "classify":
+                    await RunClassifyAsync(serviceProvider, classifierName, documentFile, text);
                     break;
                 case "help":
                 case "--help":
@@ -166,6 +180,9 @@ public class Program
         logger.LogInformation("  --mode create-analyzer  : Create sample analyzer");
         logger.LogInformation("  --mode test-analysis    : Test document analysis");
         logger.LogInformation("  --mode check-operation  : Check specific operation status");
+        logger.LogInformation("  --mode classifiers      : List all classifiers");
+        logger.LogInformation("  --mode create-classifier: Create classifier from JSON");
+        logger.LogInformation("  --mode classify         : Classify text or documents");
         logger.LogInformation("");
         
         // TODO: Implement interactive menu for Content Understanding operations
@@ -175,8 +192,9 @@ public class Program
         logger.LogInformation("1. Run health check: dotnet run -- --mode health");
         logger.LogInformation("2. List analyzers: dotnet run -- --mode analyzers");
         logger.LogInformation("3. Create sample analyzer: dotnet run -- --mode create-analyzer");
-        logger.LogInformation("4. Check the logs above for any configuration issues");
-        logger.LogInformation("5. Ensure all Azure resources are properly deployed");
+        logger.LogInformation("4. List classifiers: dotnet run -- --mode classifiers");
+        logger.LogInformation("5. Create classifier: dotnet run -- --mode create-classifier --classifier-file <file> --classifier <name>");
+        logger.LogInformation("6. Classify: dotnet run -- --mode classify --classifier <name> --text \"...\" | --document <file>");
     }
 
     private static string GetArgumentValue(string[] args, string argument, string defaultValue)
@@ -662,6 +680,234 @@ public class Program
         }
     }
     
+    private static async Task RunListClassifiersAsync(IServiceProvider serviceProvider)
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
+
+        logger.LogInformation("📋 Listing all classifiers...");
+        logger.LogInformation("");
+
+        try
+        {
+            var result = await contentUnderstandingService.ListClassifiersAsync();
+            logger.LogInformation("✅ Classifiers retrieved successfully:");
+            logger.LogInformation("{Result}", result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Failed to list classifiers");
+            Environment.Exit(1);
+        }
+    }
+
+    // NEW: Create classifier from JSON
+    private static async Task RunCreateClassifierAsync(IServiceProvider serviceProvider, string classifierName, string classifierFile)
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
+        
+        logger.LogInformation("📝 Creating classifier from JSON files...");
+        logger.LogInformation("");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(classifierName))
+            {
+                logger.LogError("❌ Please specify a classifier name with --classifier <name>");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(classifierFile))
+            {
+                logger.LogError("❌ Please specify a classifier JSON file with --classifier-file <file>");
+                return;
+            }
+
+            var jsonContent = await SampleClassifiers.LoadClassifierJsonAsync(classifierFile);
+
+            if (!SampleClassifiers.ValidateClassifierJson(jsonContent))
+            {
+                logger.LogError("❌ Invalid classifier JSON format in file: {FileName}", classifierFile);
+                return;
+            }
+
+            logger.LogInformation("✅ JSON validation passed");
+            logger.LogInformation("🚀 Creating classifier: {ClassifierName}", classifierName);
+
+            var result = await contentUnderstandingService.CreateOrUpdateClassifierAsync(classifierName, jsonContent);
+
+            logger.LogInformation("✅ Successfully created classifier: {ClassifierName}", classifierName);
+            logger.LogDebug("API Response: {Result}", result);
+        }
+        catch (FileNotFoundException ex)
+        {
+            logger.LogError("❌ Classifier JSON file not found: {Message}", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Failed to create classifier");
+        }
+    }
+
+    // NEW: Classify content (file or text)
+    private static async Task RunClassifyAsync(IServiceProvider serviceProvider, string classifierName, string documentFile, string text = "")
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
+
+        logger.LogInformation("🔎 Classify mode...");
+        logger.LogInformation("");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(classifierName))
+            {
+                logger.LogError("❌ Please specify a classifier with --classifier <name>");
+                return;
+            }
+
+            // If text provided, classify text
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                logger.LogInformation("📝 Classifying text using classifier: {Classifier}", classifierName);
+
+                var classifyResult = await contentUnderstandingService.ClassifyTextAsync(classifierName, text);
+                await HandleClassificationResultAsync(contentUnderstandingService, classifyResult, logger, "text");
+                return;
+            }
+
+            // Otherwise, require documentFile
+            if (string.IsNullOrWhiteSpace(documentFile))
+            {
+                logger.LogError("❌ Provide --text \"...\" or --document <file>");
+                return;
+            }
+
+            var projectRoot = Directory.GetCurrentDirectory();
+            var sampleDocumentsPath = Path.Combine(projectRoot, "Data", "SampleDocuments");
+
+            string targetDocumentPath;
+            string documentFileName;
+
+            if (Path.IsPathFullyQualified(documentFile))
+            {
+                targetDocumentPath = documentFile;
+                documentFileName = Path.GetFileName(documentFile);
+            }
+            else
+            {
+                targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
+                documentFileName = documentFile;
+            }
+
+            if (!File.Exists(targetDocumentPath))
+            {
+                logger.LogError("❌ Document not found: {Path}", targetDocumentPath);
+                return;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(targetDocumentPath);
+            var ext = Path.GetExtension(targetDocumentPath).ToLowerInvariant();
+            var contentType = ext switch
+            {
+                ".pdf" => "application/pdf",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".tiff" or ".tif" => "image/tiff",
+                ".bmp" => "image/bmp",
+                _ => "application/octet-stream"
+            };
+
+            logger.LogInformation("🧠 Using classifier: {Classifier}", classifierName);
+            logger.LogInformation("📄 Document: {File}", documentFileName);
+
+            var classifyResultFile = await contentUnderstandingService.ClassifyAsync(classifierName, bytes, contentType);
+            await HandleClassificationResultAsync(contentUnderstandingService, classifyResultFile, logger, documentFileName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Failed to classify");
+        }
+    }
+
+    // NEW: Shared result handling for classification
+    private static async Task HandleClassificationResultAsync(
+        ContentUnderstandingService contentUnderstandingService,
+        (string responseContent, string operationLocation) classifyResult,
+        ILogger logger,
+        string labelForExport)
+    {
+        logger.LogInformation("✅ Classification submitted");
+        logger.LogInformation("📊 Initial Response: {Result}", classifyResult.responseContent);
+
+        if (string.IsNullOrEmpty(classifyResult.operationLocation))
+        {
+            logger.LogWarning("⚠️ No Operation-Location received; printing raw response only.");
+            var fallbackOpId = Guid.NewGuid().ToString("N");
+            await ExportAnalysisResultsAsync(classifyResult.responseContent, fallbackOpId, $"classification_{labelForExport}", logger);
+            return;
+        }
+
+        logger.LogInformation("⏳ Polling for classification results (up to 20 minutes)...");
+        try
+        {
+            var resultDoc = await contentUnderstandingService.PollResultAsync(
+                classifyResult.operationLocation,
+                timeoutSeconds: 1200,
+                pollingIntervalSeconds: 5);
+
+            var resultText = resultDoc.RootElement.GetRawText();
+
+            // Try to summarize a few likely shapes
+            logger.LogInformation("📋 Classification Summary:");
+            try
+            {
+                // Common patterns: result.classifications[] or result.contents[].classifications[]
+                if (resultDoc.RootElement.TryGetProperty("result", out var result))
+                {
+                    if (result.TryGetProperty("classifications", out var clsArr) && clsArr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var c in clsArr.EnumerateArray())
+                        {
+                            var label = c.TryGetProperty("label", out var l) ? l.GetString() : c.TryGetProperty("category", out var cat) ? cat.GetString() : "<unknown>";
+                            var score = c.TryGetProperty("confidence", out var s) ? s.GetDouble() : (c.TryGetProperty("score", out var s2) ? s2.GetDouble() : double.NaN);
+                            logger.LogInformation("  • {Label} ({Score:P2})", label, double.IsNaN(score) ? 0 : score);
+                        }
+                    }
+                    else if (result.TryGetProperty("contents", out var contents) && contents.ValueKind == JsonValueKind.Array && contents.GetArrayLength() > 0)
+                    {
+                        var first = contents[0];
+                        if (first.TryGetProperty("classifications", out var nested) && nested.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var c in nested.EnumerateArray())
+                            {
+                                var label = c.TryGetProperty("label", out var l) ? l.GetString() : c.TryGetProperty("category", out var cat) ? cat.GetString() : "<unknown>";
+                                var score = c.TryGetProperty("confidence", out var s) ? s.GetDouble() : (c.TryGetProperty("score", out var s2) ? s2.GetDouble() : double.NaN);
+                                logger.LogInformation("  • {Label} ({Score:P2})", label, double.IsNaN(score) ? 0 : score);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Could not parse summary from classification result");
+            }
+
+            var opId = classifyResult.operationLocation.Split('/').LastOrDefault() ?? "unknown";
+            await ExportAnalysisResultsAsync(resultText, opId, $"classification_{labelForExport}", logger);
+        }
+        catch (TimeoutException tex)
+        {
+            var opId = classifyResult.operationLocation.Split('/').LastOrDefault() ?? "unknown";
+            logger.LogWarning("⏰ {Message}", tex.Message);
+            logger.LogInformation("🆔 Operation ID: {OperationId}", opId);
+            logger.LogInformation("💡 You can check the status later using:");
+            logger.LogInformation("    dotnet run -- --mode check-operation --operation-id {OperationId}", opId);
+        }
+    }
+
     /// <summary>
     /// Displays help information about available commands and usage
     /// </summary>
@@ -680,38 +926,46 @@ public class Program
         logger.LogInformation("  create-analyzer, create Create analyzer from JSON schema files");
         logger.LogInformation("  test-analysis, analyze  Analyze documents with specified analyzer");
         logger.LogInformation("  check-operation         Check the status of a specific operation");
+        logger.LogInformation("  classifiers             List all classifiers");
+        logger.LogInformation("  create-classifier       Create classifier from JSON schema");
+        logger.LogInformation("  classify                Classify text or a document with a classifier");
         logger.LogInformation("  interactive            Interactive mode with menu (default)");
         logger.LogInformation("");
         logger.LogInformation("OPTIONS:");
         logger.LogInformation("  --analyzer-file <file>  Specify analyzer JSON file for create-analyzer mode");
         logger.LogInformation("                         (looks in Data folder, supports partial names)");
         logger.LogInformation("  --analyzer <name>      Specify analyzer name for analysis mode");
-        logger.LogInformation("  --document <file>      Specify document file for analysis mode");
+        logger.LogInformation("  --document <file>      Specify document file for analysis or classification");
         logger.LogInformation("                         (looks in Data/SampleDocuments or absolute path)");
         logger.LogInformation("  --operation-id <id>    Specify operation ID for check-operation mode");
+        logger.LogInformation("  --classifier <name>    Specify classifier name for classification");
+        logger.LogInformation("  --classifier-file <f>  Specify classifier JSON file for create-classifier");
+        logger.LogInformation("  --text \"...\"          Provide inline text to classify");
         logger.LogInformation("");
         logger.LogInformation("EXAMPLES:");
         logger.LogInformation("  dotnet run                                          # Interactive mode");
         logger.LogInformation("  dotnet run -- --mode health                         # Health check only");
-        logger.LogInformation("  dotnet run -- --mode create-analyzer                # Create default analyzer");
-        logger.LogInformation("  dotnet run -- --mode create-analyzer --analyzer-file receipt.json");
-        logger.LogInformation("  dotnet run -- --mode test-analysis                  # Analyze with defaults");
-        logger.LogInformation("  dotnet run -- --mode analyze --analyzer receipt --document invoice1.pdf");
-        logger.LogInformation("  dotnet run -- --mode analyze --document sample.png  # Auto-detect analyzer");
+        logger.LogInformation("  dotnet run -- --mode analyzers                      # List analyzers");
+        logger.LogInformation("  dotnet run -- --mode create-analyzer --analyzer-file receipt.json --analyzer receipt");
+        logger.LogInformation("  dotnet run -- --mode analyze --analyzer receipt --document receipt1.pdf");
         logger.LogInformation("  dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
+        logger.LogInformation("  dotnet run -- --mode classifiers                    # List classifiers");
+        logger.LogInformation("  dotnet run -- --mode create-classifier --classifier-file product-categories.json --classifier products");
+        logger.LogInformation("  dotnet run -- --mode classify --classifier products --text \"laptop backpack\"");
+        logger.LogInformation("  dotnet run -- --mode classify --classifier products --document sample.png");
         logger.LogInformation("");
         logger.LogInformation("FEATURES:");
         logger.LogInformation("  ✅ Complete Azure Content Understanding API integration");
         logger.LogInformation("  ✅ Health checks for all Azure resources");
-        logger.LogInformation("  ✅ JSON-based analyzer schema management"); 
-        logger.LogInformation("  ✅ End-to-end document analysis pipeline");
+        logger.LogInformation("  ✅ JSON-based analyzer/classifier schema management"); 
+        logger.LogInformation("  ✅ End-to-end analysis and classification pipelines");
         logger.LogInformation("  ✅ Real-time polling and result formatting");
         logger.LogInformation("  ✅ Results export to JSON and formatted text files");
         logger.LogInformation("  ✅ Multi-format support (PDF, PNG, JPG, TIFF, BMP)");
         logger.LogInformation("  ✅ Parameterized operations with intelligent defaults");
         logger.LogInformation("");
         logger.LogInformation("OUTPUT:");
-        logger.LogInformation("  Analysis results are saved to the 'Output' folder:");
+        logger.LogInformation("  Analysis/classification results are saved to the 'Output' folder:");
         logger.LogInformation("  • Raw JSON results: *_results.json");
         logger.LogInformation("  • Formatted results: *_formatted.txt");
         logger.LogInformation("");

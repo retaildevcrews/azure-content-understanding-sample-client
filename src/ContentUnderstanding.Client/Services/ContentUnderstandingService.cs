@@ -26,18 +26,20 @@ public class ContentUnderstandingService
     private const string ANALYZERS_PATH = "/analyzers";
     private const string OPERATIONS_PATH = "/operations";
     private const string ANALYZE_ACTION = ":analyze";
-
+    private const string CLASSIFIERS_PATH = "/classifiers";
+    private const string CLASSIFY_ACTION = ":classify";
+    
     public ContentUnderstandingService(
-        IConfiguration configuration, 
+        IConfiguration configuration,
         ILogger<ContentUnderstandingService> logger)
     {
         _configuration = configuration;
         _logger = logger;
         _httpClient = new HttpClient();
-        
+
         // Configure HTTP client with reasonable timeouts
         _httpClient.Timeout = TimeSpan.FromMinutes(5); // Content Understanding can take time
-        
+
         // Initialize Azure credential for Key Vault access
         var options = new DefaultAzureCredentialOptions
         {
@@ -499,6 +501,205 @@ public class ContentUnderstandingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting analysis result from operation location: {OperationLocation}", operationLocationUrl);
+            throw;
+        }
+    }
+
+    // =========================
+    // Classifiers (NEW)
+    // =========================
+
+    /// <summary>
+    /// Lists all classifiers in the Content Understanding service
+    /// </summary>
+    public async Task<string> ListClassifiersAsync()
+    {
+        _logger.LogInformation("📋 Listing all classifiers...");
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            var url = BuildApiUrl(CLASSIFIERS_PATH);
+            _logger.LogDebug("GET {Url}", url);
+            var response = await _httpClient.GetAsync(url);
+            var content = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully retrieved classifiers list");
+                return content;
+            }
+            else
+            {
+                _logger.LogError("❌ Failed to list classifiers. Status: {StatusCode}, Response: {Response}", response.StatusCode, content);
+                throw new HttpRequestException($"Failed to list classifiers: {response.StatusCode} - {content}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing classifiers");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Gets a specific classifier by name
+    /// </summary>
+    public async Task<string> GetClassifierAsync(string classifierName)
+    {
+        if (string.IsNullOrEmpty(classifierName))
+            throw new ArgumentException("Classifier name cannot be null or empty", nameof(classifierName));
+
+        _logger.LogInformation("📄 Getting classifier: {ClassifierName}", classifierName);
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            var url = BuildApiUrl($"{CLASSIFIERS_PATH}/{Uri.EscapeDataString(classifierName)}");
+            _logger.LogDebug("GET {Url}", url);
+            var response = await _httpClient.GetAsync(url);
+            var content = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully retrieved classifier: {ClassifierName}", classifierName);
+                return content;
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("⚠️ Classifier not found: {ClassifierName}", classifierName);
+                throw new InvalidOperationException($"Classifier '{classifierName}' not found");
+            }
+            else
+            {
+                _logger.LogError("❌ Failed to get classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, content);
+                throw new HttpRequestException($"Failed to get classifier '{classifierName}': {response.StatusCode} - {content}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting classifier: {ClassifierName}", classifierName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Creates or updates a classifier definition (JSON schema)
+    /// </summary>
+    public async Task<string> CreateOrUpdateClassifierAsync(string classifierName, string schemaJson)
+    {
+        if (string.IsNullOrEmpty(classifierName))
+            throw new ArgumentException("Classifier name cannot be null or empty", nameof(classifierName));
+        if (string.IsNullOrEmpty(schemaJson))
+            throw new ArgumentException("Schema JSON cannot be null or empty", nameof(schemaJson));
+
+        _logger.LogInformation("📝 Creating/updating classifier: {ClassifierName}", classifierName);
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            var url = BuildApiUrl($"{CLASSIFIERS_PATH}/{Uri.EscapeDataString(classifierName)}");
+            _logger.LogInformation(url);
+            _logger.LogDebug("PUT {Url}", url);
+            var content = new StringContent(schemaJson, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PutAsync(url, content);
+            var responseText = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully created/updated classifier: {ClassifierName}", classifierName);
+                return responseText;
+            }
+            else
+            {
+                _logger.LogError("❌ Failed to create/update classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, responseText);
+                throw new HttpRequestException($"Failed to create/update classifier '{classifierName}': {response.StatusCode} - {responseText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating/updating classifier: {ClassifierName}", classifierName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Submits content for classification using a classifier (binary content)
+    /// Returns the raw response content and Operation-Location for polling (if provided)
+    /// </summary>
+    public async Task<(string responseContent, string operationLocation)> ClassifyAsync(string classifierName, byte[] contentData, string contentType)
+    {
+        if (string.IsNullOrEmpty(classifierName))
+            throw new ArgumentException("Classifier name cannot be null or empty", nameof(classifierName));
+        if (contentData == null || contentData.Length == 0)
+            throw new ArgumentException("Content data cannot be null or empty", nameof(contentData));
+        if (string.IsNullOrEmpty(contentType))
+            throw new ArgumentException("Content type cannot be null or empty", nameof(contentType));
+
+        _logger.LogInformation("🔎 Classifying content with classifier: {ClassifierName} (Size: {Size} bytes)", classifierName, contentData.Length);
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            var url = BuildApiUrl($"{CLASSIFIERS_PATH}/{Uri.EscapeDataString(classifierName)}{CLASSIFY_ACTION}");
+            _logger.LogDebug("POST {Url}", url);
+            var requestContent = new ByteArrayContent(contentData);
+            requestContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            var response = await _httpClient.PostAsync(url, requestContent);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully submitted content for classification with classifier: {ClassifierName}", classifierName);
+                var operationLocation = response.Headers.Location?.ToString() ??
+                                        (response.Headers.Contains("Operation-Location")
+                                            ? response.Headers.GetValues("Operation-Location").FirstOrDefault()
+                                            : null);
+                _logger.LogDebug("Operation-Location header: {OperationLocation}", operationLocation);
+                return (responseContent, operationLocation ?? string.Empty);
+            }
+            else
+            {
+                _logger.LogError("❌ Failed to classify content with classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, responseContent);
+                throw new HttpRequestException($"Failed to classify content with classifier '{classifierName}': {response.StatusCode} - {responseContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error classifying content with classifier: {ClassifierName}", classifierName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Submits plain text for classification using a classifier
+    /// </summary>
+    public async Task<(string responseContent, string operationLocation)> ClassifyTextAsync(string classifierName, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or empty", nameof(text));
+
+        _logger.LogInformation("🔤 Classifying text with classifier: {ClassifierName} (Length: {Len})", classifierName, text.Length);
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            var url = BuildApiUrl($"{CLASSIFIERS_PATH}/{Uri.EscapeDataString(classifierName)}{CLASSIFY_ACTION}");
+            _logger.LogDebug("POST {Url}", url);
+            // Using text/plain keeps parity with binary flow; if service requires JSON, swap to JSON payload easily.
+            var requestContent = new StringContent(text, Encoding.UTF8, "text/plain");
+            var response = await _httpClient.PostAsync(url, requestContent);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully submitted text for classification with classifier: {ClassifierName}", classifierName);
+                var operationLocation = response.Headers.Location?.ToString() ??
+                                        (response.Headers.Contains("Operation-Location")
+                                            ? response.Headers.GetValues("Operation-Location").FirstOrDefault()
+                                            : null);
+                _logger.LogDebug("Operation-Location header: {OperationLocation}", operationLocation);
+                return (responseContent, operationLocation ?? string.Empty);
+            }
+            else
+            {
+                _logger.LogError("❌ Failed to classify text with classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, responseContent);
+                throw new HttpRequestException($"Failed to classify text with classifier '{classifierName}': {response.StatusCode} - {responseContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error classifying text with classifier: {ClassifierName}", classifierName);
             throw;
         }
     }

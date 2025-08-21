@@ -1,0 +1,17 @@
+{
+  "description": "Classify document for Project 1 to determine the correct analyzer",
+  "tags": {
+    "createdBy": "AdminUser"
+  },
+  "splitMode": "noSplit",
+  "categories": {
+    "receipt": {
+      "description": "Classify document as a receipt",
+      "analyzerId": "receipt"
+    },
+    "engine-manual": {
+      "description": "Classify document for engine manual processing",
+      "analyzerId": "engine_generate"
+    }
+  }
+}
