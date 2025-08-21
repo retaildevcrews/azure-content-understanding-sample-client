@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace ContentUnderstanding.Sample.Data;
+namespace ContentUnderstanding.Client.Data;
 
 /// <summary>
 /// Utility class for loading sample analyzer schemas from JSON files

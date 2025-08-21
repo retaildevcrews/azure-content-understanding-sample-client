@@ -8,10 +8,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Http;
-using ContentUnderstanding.Sample.Services;
-using ContentUnderstanding.Sample.Data;
+using ContentUnderstanding.Client.Services;
+using ContentUnderstanding.Client.Data;
 
-namespace ContentUnderstanding.Sample;
+namespace ContentUnderstanding.Client;
 
 public class Program
 {

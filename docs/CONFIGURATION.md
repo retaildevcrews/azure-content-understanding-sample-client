@@ -57,7 +57,7 @@ The Terraform deployment automatically creates the following secrets in Azure Ke
   "Logging": {
     "LogLevel": {
       "Default": "Debug",
-      "ContentUnderstanding.Sample": "Debug"
+  "ContentUnderstanding.Client": "Debug"
     }
   },
   "AzureKeyVault": {
@@ -105,7 +105,7 @@ The application includes a health check that verifies:
 The application uses an enhanced polling system for long-running Content Understanding operations:
 
 - **Polling Timeout**: 20 minutes maximum wait time
-- **Progressive Backoff**: Starts at 10 seconds, gradually increases to 30 seconds maximum
+- **Fixed Interval**: Polling every 5 seconds up to 20 minutes
 - **Retry Logic**: Continues polling even if individual requests fail
 - **Clean Results**: Operation IDs are cleaned for readable filenames
 - **Export Format**: Results saved as both JSON and formatted text with operation ID included

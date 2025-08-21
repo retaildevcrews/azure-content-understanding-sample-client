@@ -247,7 +247,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "🎉 Deployment completed successfully!"
     echo ""
     echo "📋 Next steps:"
-    echo "   1. Run the C# sample application: 'cd ../src/ContentUnderstanding.Sample && dotnet run'"
+    echo "   1. Run the C# sample application: 'cd ../src/ContentUnderstanding.Client && dotnet run'"
     echo "   2. Add your sample documents to the storage account"
     echo "   3. Create and test your analyzer schemas"
     echo ""

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
-namespace ContentUnderstanding.Sample.Services;
+namespace ContentUnderstanding.Client.Services;
 
 /// <summary>
 /// Health check service to verify connectivity and access to deployed Azure resources

@@ -9,7 +9,7 @@ dotnet run
 # Health check all Azure resources
 dotnet run -- --mode health
 
-# Analyze with defaults (receipt.png + receipt analyzer)
+# Analyze with defaults (uses bundled sample document and default analyzer)
 dotnet run -- --mode analyze
 
 # Analyze specific document
@@ -52,7 +52,7 @@ dotnet run -- --mode analyze --analyzer receipt --document receipt.png
 dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5
 
 # The system will automatically:
-# - Poll for up to 20 minutes with progressive backoff
+# - Poll for up to 20 minutes (5s interval)
 # - Export results when complete
 # - Handle timeouts gracefully
 ```
@@ -77,7 +77,7 @@ dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84
 ## 🔄 Operation Polling Details
 
 - **Timeout**: 20 minutes maximum
-- **Intervals**: 10s → 15s → 20s → 30s (progressive backoff)
+- **Interval**: 5 seconds (fixed)
 - **Retry Logic**: Continues even if individual requests fail
 - **Export**: Results saved to Output/ directory when complete
 
@@ -145,7 +145,7 @@ project/
 3. **Use Partial Names**: `--analyzer-file engine` works for "enginemanual-Analyzer_*.json"  
 4. **Absolute Paths Work**: Use full file paths for documents outside the project
 5. **Results Persist**: Check Output/ directory for previous analysis results
-6. **Progressive Backoff**: Longer operations automatically use slower polling intervals
+6. **Fixed Interval**: Polling uses a steady 5-second interval up to 20 minutes
 
 ## 📚 Related Documentation
 

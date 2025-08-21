@@ -7,7 +7,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace ContentUnderstanding.Sample.Services;
+namespace ContentUnderstanding.Client.Services;
 
 /// <summary>
 /// Service for making HTTP calls to Azure Content Understanding API

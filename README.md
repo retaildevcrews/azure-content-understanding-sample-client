@@ -8,7 +8,7 @@ A comprehensive .NET 8 sample application demonstrating Azure Content Understand
 📁 Results saved to:
     📄 Raw JSON: Output\receipt_069e39de-5132-425d-87b7_2025-08-07_09-46-09_results.json
     📋 Formatted: Output\receipt_069e39de-5132-425d-87b7_2025-08-07_09-46-09_formatted.txtg API integration** with authentication and URL constants
-- ✅ **Enhanced polling system** with 20-minute timeout and progressive backoff for long-running operations
+- ✅ **Centralized polling** with 20-minute timeout (5s interval)
 - ✅ **Improved JSON result parsing** with proper field extraction and error handling
 - ✅ **Health checks for all Azure resources** (Content Understanding, Key Vault, Storage Account)
 - ✅ **JSON-based analyzer schema management** with automatic discovery and validation
@@ -82,8 +82,11 @@ chmod +x deploy.sh
 ### 2. Build and Run
 
 ```bash
+# From the repo root, change into the project folder
+cd src/ContentUnderstanding.Client
+
 # Build the solution
-dotnet build
+dotnet build ../../ContentUnderstandingSample.sln
 
 # Run in interactive mode (default) - guided experience
 dotnet run
@@ -92,7 +95,10 @@ dotnet run
 dotnet run -- --mode help                                    # See all options
 dotnet run -- --mode health                                  # Health check
 dotnet run -- --mode create-analyzer                         # Create analyzers
-dotnet run -- --mode analyze --document receipt.png         # Analyze document
+dotnet run -- --mode analyze --document receipt.png          # Analyze document
+
+# Alternatively, run from repo root using --project
+# dotnet run --project src/ContentUnderstanding.Client/ContentUnderstanding.Client.csproj -- --mode health
 ```
 
 ### 3. Verify Everything Works
@@ -241,7 +247,7 @@ When running `dotnet run -- --mode analyze --document receipt.png`, you'll see t
 🎯 Using specified analyzer: receipt
 🧠 Analyzing document with analyzer: receipt
 ✅ Document analysis submitted successfully!
-⏳ Polling for analysis results (timeout: 20 minutes, progressive backoff)...
+⏳ Polling for analysis results (timeout: 20 minutes, 5s interval)...
 🎉 Analysis completed successfully! (completed in 2 polling attempts, took 25 seconds)
 
 📊 ANALYSIS SUMMARY:
@@ -286,12 +292,12 @@ Output:
 ```
 azure-ai-content-understanding-basic/
 ├── src/                                    # Source code
-│   ├── ContentUnderstanding.Client/       # Main console application
+│   ├── ContentUnderstanding.Client/       # Main console application (namespace ContentUnderstanding.Client)
 │   │   ├── Program.cs                     # Main entry point with parameterized CLI
-│   │   ├── Services/                      # HTTP service layer
+│   │   ├── Services/                      # HTTP service layer (ContentUnderstanding.Client.Services)
 │   │   │   ├── ContentUnderstandingService.cs  # API client with auth
 │   │   │   └── HealthCheckService.cs      # Health check implementation
-│   │   ├── Data/                          # Analyzer schemas and sample documents
+│   │   ├── Data/                          # Analyzer schemas and sample documents (ContentUnderstanding.Client.Data)
 │   │   │   ├── SampleAnalyzers.cs         # JSON schema utilities
 │   │   │   ├── receipt-Analyzer_*.json    # Receipt analyzer definition
 │   │   │   ├── enginemanual-Analyzer_*.json  # Engine manual analyzer

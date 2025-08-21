@@ -103,7 +103,7 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
   - [x] Complete end-to-end document analysis workflow working
   - [x] Receipt analyzer successfully extracts VendorName and Items
   - [x] Enhanced Operation-Location header polling with 20-minute timeout
-  - [x] Progressive backoff polling (10s → 15s → 20s → 30s max intervals)
+  - [x] Centralized polling with 20-minute timeout (5s fixed interval)
   - [x] Real-time status tracking and improved result parsing
   - [x] Clean filename generation with operation ID extraction
 
@@ -169,8 +169,7 @@ Build a C# sample project to test Azure Content Understanding capabilities with 
 ```
 ContentUnderstandingSample/
 ├── src/
-│   ├── ContentUnderstanding.Sample/          # Main console app with HTTP services
-│   └── ContentUnderstanding.Models/          # Shared request/response models
+│   └── ContentUnderstanding.Client/          # Main console app (services, models inside)
 ├── iac/                                       # Infrastructure as Code (Terraform)
 │   ├── main.tf
 │   ├── variables.tf
