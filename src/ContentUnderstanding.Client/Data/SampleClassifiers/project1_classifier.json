@@ -11,7 +11,7 @@
     },
     "engine-manual": {
       "description": "Classify document for engine manual processing",
-      "analyzerId": "engine_generate"
+      "analyzerId": "engines_generate"
     }
   }
 }

@@ -200,33 +200,66 @@ public class ContentUnderstandingService
     }
 
     /// <summary>
-    /// Lists all analyzers in the Content Understanding service
+    /// Lists all analyzers, returning a slim JSON array of { analyzerId, description } objects.
+    /// Accepts either a top-level array response or an object with a 'value' array.
     /// </summary>
     public async Task<string> ListAnalyzersAsync()
     {
         _logger.LogInformation("📋 Listing all analyzers...");
-        
         try
         {
             await ConfigureAuthenticationAsync();
-            
             var url = BuildApiUrl(ANALYZERS_PATH);
             _logger.LogDebug("GET {Url}", url);
-            
             var response = await _httpClient.GetAsync(url);
             var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
+
+            if (!response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("✅ Successfully retrieved analyzers list");
-                return content;
+                _logger.LogError("❌ Failed to list analyzers. Status: {StatusCode}, Response: {Response}", response.StatusCode, content);
+                throw new HttpRequestException($"Failed to list analyzers: {response.StatusCode} - {content}");
+            }
+
+            using var doc = JsonDocument.Parse(content);
+            JsonElement arrayElem;
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                arrayElem = doc.RootElement;
+            }
+            else if (doc.RootElement.TryGetProperty("value", out var valueProp) && valueProp.ValueKind == JsonValueKind.Array)
+            {
+                arrayElem = valueProp;
             }
             else
             {
-                _logger.LogError("❌ Failed to list analyzers. Status: {StatusCode}, Response: {Response}", 
-                    response.StatusCode, content);
-                throw new HttpRequestException($"Failed to list analyzers: {response.StatusCode} - {content}");
+                // Unexpected shape: return empty array to keep contract minimal and safe
+                _logger.LogWarning("Analyzer list response had unexpected shape; returning empty list");
+                return "[]";
             }
+
+            var results = new List<Dictionary<string, string?>>();
+            foreach (var item in arrayElem.EnumerateArray())
+            {
+                string? analyzerId = null;
+                string? description = null;
+
+                if (item.TryGetProperty("analyzerId", out var aId)) analyzerId = aId.GetString();
+                else if (item.TryGetProperty("id", out var idProp)) analyzerId = idProp.GetString();
+
+                if (item.TryGetProperty("description", out var descProp)) description = descProp.GetString();
+
+                if (!string.IsNullOrWhiteSpace(analyzerId))
+                {
+                    results.Add(new Dictionary<string, string?>
+                    {
+                        ["analyzerId"] = analyzerId,
+                        ["description"] = description
+                    });
+                }
+            }
+
+            _logger.LogInformation("✅ Successfully retrieved analyzers list (slimmed)");
+            return JsonSerializer.Serialize(results);
         }
         catch (Exception ex)
         {
@@ -510,7 +543,8 @@ public class ContentUnderstandingService
     // =========================
 
     /// <summary>
-    /// Lists all classifiers in the Content Understanding service
+    /// Lists all classifiers, returning a slim JSON array of { classifierId, description } objects.
+    /// Accepts either a top-level array response or an object with a 'value' array.
     /// </summary>
     public async Task<string> ListClassifiersAsync()
     {
@@ -522,16 +556,51 @@ public class ContentUnderstandingService
             _logger.LogDebug("GET {Url}", url);
             var response = await _httpClient.GetAsync(url);
             var content = await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("✅ Successfully retrieved classifiers list");
-                return content;
-            }
-            else
+            if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("❌ Failed to list classifiers. Status: {StatusCode}, Response: {Response}", response.StatusCode, content);
                 throw new HttpRequestException($"Failed to list classifiers: {response.StatusCode} - {content}");
             }
+
+            using var doc = JsonDocument.Parse(content);
+            JsonElement arrayElem;
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                arrayElem = doc.RootElement;
+            }
+            else if (doc.RootElement.TryGetProperty("value", out var valueProp) && valueProp.ValueKind == JsonValueKind.Array)
+            {
+                arrayElem = valueProp;
+            }
+            else
+            {
+                _logger.LogWarning("Classifier list response had unexpected shape; returning empty list");
+                return "[]";
+            }
+
+            var results = new List<Dictionary<string, string?>>();
+            foreach (var item in arrayElem.EnumerateArray())
+            {
+                string? classifierId = null;
+                string? description = null;
+
+                if (item.TryGetProperty("classifierId", out var cId)) classifierId = cId.GetString();
+                else if (item.TryGetProperty("id", out var idProp)) classifierId = idProp.GetString();
+
+                if (item.TryGetProperty("description", out var descProp)) description = descProp.GetString();
+
+                if (!string.IsNullOrWhiteSpace(classifierId))
+                {
+                    results.Add(new Dictionary<string, string?>
+                    {
+                        ["classifierId"] = classifierId,
+                        ["description"] = description
+                    });
+                }
+            }
+
+            _logger.LogInformation("✅ Successfully retrieved classifiers list (slimmed)");
+            return JsonSerializer.Serialize(results);
         }
         catch (Exception ex)
         {

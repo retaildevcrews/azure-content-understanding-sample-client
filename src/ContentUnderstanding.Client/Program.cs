@@ -317,7 +317,16 @@ public class Program
         {
             var result = await contentUnderstandingService.ListAnalyzersAsync();
             logger.LogInformation("✅ Analyzers retrieved successfully:");
-            logger.LogInformation("{Result}", result);
+            try
+            {
+                using var doc = JsonDocument.Parse(result);
+                var pretty = JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
+                logger.LogInformation("{Result}", pretty);
+            }
+            catch
+            {
+                logger.LogInformation("{Result}", result);
+            }
         }
         catch (Exception ex)
         {
@@ -432,27 +441,39 @@ public class Program
             }
             else
             {
-                // Default to receipt analyzer, but check if it exists
+                // Default to receipt analyzer, but check if it exists using the slim list
                 try
                 {
                     var listAnalyzersResult = await contentUnderstandingService.ListAnalyzersAsync();
-                    var doc = JsonDocument.Parse(listAnalyzersResult);
-                    var analyzers = doc.RootElement.GetProperty("value");
-                    
-                    var availableAnalyzerNames = new List<string>();
-                    foreach (var analyzer in analyzers.EnumerateArray())
+                    using var doc = JsonDocument.Parse(listAnalyzersResult);
+                    if (doc.RootElement.ValueKind != JsonValueKind.Array)
                     {
-                        availableAnalyzerNames.Add(analyzer.GetProperty("id").GetString() ?? "");
+                        logger.LogError("❌ Unexpected analyzer list format");
+                        return;
                     }
-                    
+
+                    var availableAnalyzerNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var analyzer in doc.RootElement.EnumerateArray())
+                    {
+                        string? id = null;
+                        if (analyzer.TryGetProperty("analyzerId", out var aId)) id = aId.GetString();
+                        else if (analyzer.TryGetProperty("id", out var legacyId)) id = legacyId.GetString();
+                        if (!string.IsNullOrWhiteSpace(id)) availableAnalyzerNames.Add(id);
+                    }
+
                     if (availableAnalyzerNames.Contains("receipt"))
                     {
                         targetAnalyzer = "receipt";
                         logger.LogInformation("🔧 Using default analyzer: receipt");
                     }
+                    else if (availableAnalyzerNames.Count > 0)
+                    {
+                        targetAnalyzer = availableAnalyzerNames.First();
+                        logger.LogInformation("🔧 Using first available analyzer: {Analyzer}", targetAnalyzer);
+                    }
                     else
                     {
-                        logger.LogError("❌ Default analyzer not found. Please create an analyzer first with --mode create-analyzer");
+                        logger.LogError("❌ No analyzers found. Please create an analyzer first with --mode create-analyzer");
                         return;
                     }
                 }
