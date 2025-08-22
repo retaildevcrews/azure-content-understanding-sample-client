@@ -64,7 +64,15 @@ public class Program
                     break;
                 case "test-analysis":
                 case "analyze":
-                    await RunTestAnalysisAsync(serviceProvider, analyzerName, documentFile);
+                    if (!string.IsNullOrWhiteSpace(analyzerName) || !string.IsNullOrWhiteSpace(documentFile))
+                    {
+                        await RunAnalysisAsync(serviceProvider, analyzerName, documentFile);
+                    }
+                    else
+                    {
+                        // No parameters provided: run the default test (receipt analyzer + sample file)
+                        await RunTestAnalysisAsync(serviceProvider);
+                    }
                     break;
                 case "check-operation":
                 case "operation":
@@ -339,27 +347,36 @@ public class Program
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
-        
-        logger.LogInformation("📝 Creating analyzer from JSON files...");
+        logger.LogInformation("📝 Creating analyzer from JSON...");
         logger.LogInformation("");
 
         try
         {
+            if (string.IsNullOrWhiteSpace(analyzername))
+            {
+                logger.LogError("❌ Please specify an analyzer name with --analyzer <name>");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(analyzerFile))
+            {
+                logger.LogError("❌ Please specify an analyzer JSON file with --analyzer-file <file>");
+                return;
+            }
+
             var jsonContent = await SampleAnalyzers.LoadAnalyzerJsonAsync(analyzerFile);
-            
-            // Validate the JSON
+
             if (!SampleAnalyzers.ValidateAnalyzerJson(jsonContent))
             {
-                logger.LogError("❌ Invalid analyzer JSON format in file: {FileName}", analyzername);
+                logger.LogError("❌ Invalid analyzer JSON format in file: {FileName}", analyzerFile);
                 return;
             }
 
             logger.LogInformation("✅ JSON validation passed");
             logger.LogInformation("🚀 Creating analyzer: {AnalyzerName}", analyzername);
 
-            // Create the analyzer using the Content Understanding service
             var result = await contentUnderstandingService.CreateOrUpdateAnalyzerAsync(analyzername, jsonContent);
-            
+
             logger.LogInformation("✅ Successfully created analyzer: {AnalyzerName}", analyzername);
             logger.LogDebug("API Response: {Result}", result);
         }
@@ -373,123 +390,57 @@ public class Program
         }
     }
 
-    private static async Task RunTestAnalysisAsync(IServiceProvider serviceProvider, string analyzerName = "", string documentFile = "")
+    // Parameter-driven analysis (requires analyzer and document)
+    private static async Task RunAnalysisAsync(IServiceProvider serviceProvider, string analyzerName, string documentFile)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
 
-        logger.LogInformation("🔍 Test document analysis mode...");
+        logger.LogInformation("🔍 Analyze mode...");
         logger.LogInformation("");
+
+        if (string.IsNullOrWhiteSpace(analyzerName))
+        {
+            logger.LogError("❌ Please specify an analyzer with --analyzer <name>");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(documentFile))
+        {
+            logger.LogError("❌ Please specify a document with --document <file>");
+            return;
+        }
 
         try
         {
-            // Determine which document to analyze
             var projectRoot = Directory.GetCurrentDirectory();
             var sampleDocumentsPath = Path.Combine(projectRoot, "Data", "SampleDocuments");
-            
+
             string targetDocumentPath;
             string documentFileName;
-            
-            if (!string.IsNullOrEmpty(documentFile))
+
+            if (Path.IsPathFullyQualified(documentFile))
             {
-                // Check if it's a full path or just filename
-                if (Path.IsPathFullyQualified(documentFile))
-                {
-                    targetDocumentPath = documentFile;
-                    documentFileName = Path.GetFileName(documentFile);
-                }
-                else
-                {
-                    targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
-                    documentFileName = documentFile;
-                }
-                
-                if (!File.Exists(targetDocumentPath))
-                {
-                    logger.LogError("❌ Specified document not found: {FilePath}", targetDocumentPath);
-                    
-                    return;
-                }
+                targetDocumentPath = documentFile;
+                documentFileName = Path.GetFileName(documentFile);
             }
             else
             {
-                // Default to receipt1.pdf
-                targetDocumentPath = Path.Combine(sampleDocumentsPath, "receipt1.pdf");
-                documentFileName = "receipt1.pdf";
-                
-                if (!File.Exists(targetDocumentPath))
-                {
-                    logger.LogError("❌ Default document not found: {FilePath}", targetDocumentPath);
-                    
-                    return;
-                }
+                targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
+                documentFileName = documentFile;
             }
 
-            logger.LogInformation("📄 Using document: {FileName}", documentFileName);
-            logger.LogInformation("📁 Document path: {FilePath}", targetDocumentPath);
+            if (!File.Exists(targetDocumentPath))
+            {
+                logger.LogError("❌ Document not found: {Path}", targetDocumentPath);
+                return;
+            }
 
-            // Read the document file
             var documentData = await File.ReadAllBytesAsync(targetDocumentPath);
-            logger.LogInformation("📊 Document size: {Size} bytes", documentData.Length);
+            logger.LogInformation("🧠 Using analyzer: {Analyzer}", analyzerName);
+            logger.LogInformation("📄 Document: {File}", documentFileName);
 
-            // Determine which analyzer to use
-            string targetAnalyzer;
-            if (!string.IsNullOrEmpty(analyzerName))
-            {
-                targetAnalyzer = analyzerName;
-                logger.LogInformation("🎯 Using specified analyzer: {AnalyzerName}", analyzerName);
-            }
-            else
-            {
-                // Default to receipt analyzer, but check if it exists using the slim list
-                try
-                {
-                    var listAnalyzersResult = await contentUnderstandingService.ListAnalyzersAsync();
-                    using var doc = JsonDocument.Parse(listAnalyzersResult);
-                    if (doc.RootElement.ValueKind != JsonValueKind.Array)
-                    {
-                        logger.LogError("❌ Unexpected analyzer list format");
-                        return;
-                    }
-
-                    var availableAnalyzerNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var analyzer in doc.RootElement.EnumerateArray())
-                    {
-                        string? id = null;
-                        if (analyzer.TryGetProperty("analyzerId", out var aId)) id = aId.GetString();
-                        else if (analyzer.TryGetProperty("id", out var legacyId)) id = legacyId.GetString();
-                        if (!string.IsNullOrWhiteSpace(id)) availableAnalyzerNames.Add(id);
-                    }
-
-                    if (availableAnalyzerNames.Contains("receipt"))
-                    {
-                        targetAnalyzer = "receipt";
-                        logger.LogInformation("🔧 Using default analyzer: receipt");
-                    }
-                    else if (availableAnalyzerNames.Count > 0)
-                    {
-                        targetAnalyzer = availableAnalyzerNames.First();
-                        logger.LogInformation("🔧 Using first available analyzer: {Analyzer}", targetAnalyzer);
-                    }
-                    else
-                    {
-                        logger.LogError("❌ No analyzers found. Please create an analyzer first with --mode create-analyzer");
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError("❌ Failed to list analyzers: {Message}", ex.Message);
-                    logger.LogInformation("💡 Falling back to default analyzer: receipt");
-                    targetAnalyzer = "receipt";
-                }
-            }
-            
-            logger.LogInformation("🧠 Analyzing document with analyzer: {AnalyzerName}", targetAnalyzer);
-
-            // Get the content type based on file extension
-            var fileExtension = Path.GetExtension(targetDocumentPath).ToLowerInvariant();
-            var contentType = fileExtension switch
+            var ext = Path.GetExtension(targetDocumentPath).ToLowerInvariant();
+            var contentType = ext switch
             {
                 ".pdf" => "application/pdf",
                 ".png" => "image/png",
@@ -499,111 +450,186 @@ public class Program
                 _ => "application/octet-stream"
             };
 
-            // Submit document for analysis
             var analysisResult = await contentUnderstandingService.AnalyzeDocumentAsync(
-                targetAnalyzer, 
-                documentData, 
+                analyzerName,
+                documentData,
                 contentType);
 
-            logger.LogInformation("✅ Document analysis submitted successfully!");
-            logger.LogInformation("📊 Analysis Result: {Result}", analysisResult.responseContent);
-
-            // Check if we got an operation location URL for polling
-            if (!string.IsNullOrEmpty(analysisResult.operationLocation))
-            {
-                logger.LogInformation("🔄 Operation Location: {OperationLocation}", analysisResult.operationLocation);
-                logger.LogInformation("⏳ Polling for analysis results (up to 20 minutes)...");
-
-                try
-                {
-                    var resultDoc = await contentUnderstandingService.PollResultAsync(
-                        analysisResult.operationLocation,
-                        timeoutSeconds: 1200,
-                        pollingIntervalSeconds: 5);
-
-                    var resultResponse = resultDoc.RootElement.GetRawText();
-
-                    // Display results summary instead of full JSON
-                    logger.LogInformation("📋 Analysis Results Summary:");
-                    try
-                    {
-                        // The structure is: result -> contents[0] -> fields
-                        if (resultDoc.RootElement.TryGetProperty("result", out var result) &&
-                            result.TryGetProperty("contents", out var contents) &&
-                            contents.GetArrayLength() > 0)
-                        {
-                            var firstContent = contents[0];
-                            if (firstContent.TryGetProperty("fields", out var fields))
-                            {
-                                foreach (var field in fields.EnumerateObject())
-                                {
-                                    var fieldValue = ExtractFieldValue(field.Value);
-                                    logger.LogInformation("  • {FieldName}: {FieldValue}", field.Name, fieldValue);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            logger.LogInformation("  ✅ Document processed successfully, but no specific fields were extracted");
-                            logger.LogInformation("  💡 This might be normal depending on the analyzer schema");
-                        }
-
-                        // Extract operation ID for reference
-                        var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                        logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
-
-                        // Export results to files
-                        await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
-                    }
-                    catch (Exception parseEx)
-                    {
-                        logger.LogWarning("⚠️ Could not parse results summary: {Message}", parseEx.Message);
-                        logger.LogDebug(parseEx, "Full parsing exception");
-                        logger.LogInformation("📋 Operation completed successfully - raw results available via API");
-
-                        // Still try to export raw results
-                        var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                        await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
-                    }
-                }
-                catch (TimeoutException tex)
-                {
-                    var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                    logger.LogWarning("⏰ {Message}", tex.Message);
-                    logger.LogInformation("� Operation ID: {OperationId}", operationId);
-                    logger.LogInformation("� You can check the status later using:");
-                    logger.LogInformation("    dotnet run -- --mode check-operation --operation-id {OperationId}", operationId);
-                    logger.LogInformation("� Or check the Azure portal for completion status.");
-                }
-                catch (InvalidOperationException ioex)
-                {
-                    logger.LogError("❌ Analysis failed: {Message}", ioex.Message);
-                }
-            }
-            else
-            {
-                logger.LogWarning("⚠️ No Operation-Location header received. Cannot poll for results.");
-                // Fallback: try to parse the operation ID from the response content
-                try
-                {
-                    var analysisResponse = System.Text.Json.JsonDocument.Parse(analysisResult.responseContent);
-                    var operationId = analysisResponse.RootElement.GetProperty("id").GetString();
-                    logger.LogInformation("🔄 Fallback: Found Operation ID in response: {OperationId}", operationId);
-                    logger.LogInformation("💡 Consider checking the Azure portal or using the original GetAnalysisResultAsync method");
-                }
-                catch (Exception parseEx)
-                {
-                    logger.LogError(parseEx, "❌ Could not parse operation ID from response");
-                }
-            }
-        }
-        catch (FileNotFoundException ex)
-        {
-            logger.LogError("❌ Document file not found: {Message}", ex.Message);
+            await HandleAnalysisResultAsync(contentUnderstandingService, analysisResult, logger, documentFileName);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "❌ Failed to analyze document");
+            logger.LogError(ex, "❌ Failed to analyze");
+        }
+    }
+
+    // Existing: Default test analysis that picks a known analyzer and sample file when none are provided
+    private static async Task RunTestAnalysisAsync(IServiceProvider serviceProvider)
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
+
+        logger.LogInformation("🔍 Test document analysis mode (defaults)...");
+        logger.LogInformation("");
+
+        try
+        {
+            var projectRoot = Directory.GetCurrentDirectory();
+            var sampleDocumentsPath = Path.Combine(projectRoot, "Data", "SampleDocuments");
+            var targetDocumentPath = Path.Combine(sampleDocumentsPath, "receipt1.pdf");
+            var documentFileName = "receipt1.pdf";
+
+            if (!File.Exists(targetDocumentPath))
+            {
+                logger.LogError("❌ Default document not found: {FilePath}", targetDocumentPath);
+                return;
+            }
+
+            logger.LogInformation("📄 Using document: {FileName}", documentFileName);
+            logger.LogInformation("📁 Document path: {FilePath}", targetDocumentPath);
+
+            var documentData = await File.ReadAllBytesAsync(targetDocumentPath);
+            logger.LogInformation("📊 Document size: {Size} bytes", documentData.Length);
+
+            // Ensure a default analyzer exists, prefer 'receipt'
+            string targetAnalyzer = "receipt";
+            try
+            {
+                var listAnalyzersResult = await contentUnderstandingService.ListAnalyzersAsync();
+                using var doc = JsonDocument.Parse(listAnalyzersResult);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var analyzer in doc.RootElement.EnumerateArray())
+                    {
+                        if (analyzer.TryGetProperty("analyzerId", out var aId) && !string.IsNullOrWhiteSpace(aId.GetString()))
+                            names.Add(aId.GetString()!);
+                        else if (analyzer.TryGetProperty("id", out var legacyId) && !string.IsNullOrWhiteSpace(legacyId.GetString()))
+                            names.Add(legacyId.GetString()!);
+                    }
+                    if (!names.Contains("receipt") && names.Count > 0)
+                        targetAnalyzer = names.First();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning("⚠️ Could not list analyzers, defaulting to 'receipt': {Message}", ex.Message);
+            }
+
+            logger.LogInformation("🎯 Using analyzer: {AnalyzerName}", targetAnalyzer);
+
+            var contentType = "application/pdf";
+            var analysisResult = await contentUnderstandingService.AnalyzeDocumentAsync(
+                targetAnalyzer,
+                documentData,
+                contentType);
+
+            await HandleAnalysisResultAsync(contentUnderstandingService, analysisResult, logger, documentFileName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Failed to run default test analysis");
+        }
+    }
+    
+    // Shared result handling for analysis operations
+    private static async Task HandleAnalysisResultAsync(
+        ContentUnderstandingService contentUnderstandingService,
+        (string responseContent, string operationLocation) analysisResult,
+        ILogger logger,
+        string documentFileName)
+    {
+        logger.LogInformation("✅ Analysis submitted successfully!");
+        logger.LogInformation("📊 Initial Response: {Result}", analysisResult.responseContent);
+
+        if (!string.IsNullOrEmpty(analysisResult.operationLocation))
+        {
+            logger.LogInformation("🔄 Operation Location: {OperationLocation}", analysisResult.operationLocation);
+            logger.LogInformation("⏳ Polling for analysis results (up to 20 minutes)...");
+
+            try
+            {
+                var resultDoc = await contentUnderstandingService.PollResultAsync(
+                    analysisResult.operationLocation,
+                    timeoutSeconds: 1200,
+                    pollingIntervalSeconds: 5);
+
+                var resultResponse = resultDoc.RootElement.GetRawText();
+
+                // Display results summary instead of full JSON
+                logger.LogInformation("📋 Analysis Results Summary:");
+                try
+                {
+                    // The structure is: result -> contents[0] -> fields
+                    if (resultDoc.RootElement.TryGetProperty("result", out var result) &&
+                        result.TryGetProperty("contents", out var contents) &&
+                        contents.GetArrayLength() > 0)
+                    {
+                        var firstContent = contents[0];
+                        if (firstContent.TryGetProperty("fields", out var fields))
+                        {
+                            foreach (var field in fields.EnumerateObject())
+                            {
+                                var fieldValue = ExtractFieldValue(field.Value);
+                                logger.LogInformation("  • {FieldName}: {FieldValue}", field.Name, fieldValue);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        logger.LogInformation("  ✅ Document processed successfully, but no specific fields were extracted");
+                        logger.LogInformation("  💡 This might be normal depending on the analyzer schema");
+                    }
+
+                    // Extract operation ID for reference
+                    var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
+                    logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
+
+                    // Export results to files
+                    await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
+                }
+                catch (Exception parseEx)
+                {
+                    logger.LogWarning("⚠️ Could not parse results summary: {Message}", parseEx.Message);
+                    logger.LogDebug(parseEx, "Full parsing exception");
+                    logger.LogInformation("📋 Operation completed successfully - raw results available via API");
+
+                    // Still try to export raw results
+                    var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
+                    await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
+                }
+            }
+            catch (TimeoutException tex)
+            {
+                var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
+                logger.LogWarning("⏰ {Message}", tex.Message);
+                logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
+                logger.LogInformation("💡 You can check the status later using:");
+                logger.LogInformation("    dotnet run -- --mode check-operation --operation-id {OperationId}", operationId);
+                logger.LogInformation("💡 Or check the Azure portal for completion status.");
+            }
+            catch (InvalidOperationException ioex)
+            {
+                logger.LogError("❌ Analysis failed: {Message}", ioex.Message);
+            }
+        }
+        else
+        {
+            logger.LogWarning("⚠️ No Operation-Location header received. Cannot poll for results.");
+            // Fallback: try to parse the operation ID from the response content
+            try
+            {
+                using var analysisResponse = JsonDocument.Parse(analysisResult.responseContent);
+                if (analysisResponse.RootElement.TryGetProperty("id", out var idProp))
+                {
+                    var operationId = idProp.GetString();
+                    logger.LogInformation("🔄 Fallback: Found Operation ID in response: {OperationId}", operationId);
+                }
+            }
+            catch (Exception parseEx)
+            {
+                logger.LogDebug(parseEx, "Could not parse operation ID from response");
+            }
         }
     }
     
@@ -628,7 +654,7 @@ public class Program
             logger.LogInformation("🔍 Checking operation: {OperationId}", operationId);
 
             // Try to get the operation result directly
-            var resultResponse = await contentUnderstandingService.GetAnalysisResultAsync(operationId);
+            var resultResponse = await contentUnderstandingService.GetOperationResultAsync(operationId);
             var resultDoc = System.Text.Json.JsonDocument.Parse(resultResponse);
             var currentStatus = resultDoc.RootElement.GetProperty("status").GetString();
 
@@ -794,7 +820,7 @@ public class Program
                 logger.LogInformation("📝 Classifying text using classifier: {Classifier}", classifierName);
 
                 var classifyResult = await contentUnderstandingService.ClassifyTextAsync(classifierName, text);
-                await HandleClassificationResultAsync(contentUnderstandingService, classifyResult, logger, "text");
+                await HandleAnalysisResultAsync(contentUnderstandingService, classifyResult, logger, "text");
                 return;
             }
 
@@ -844,88 +870,11 @@ public class Program
             logger.LogInformation("📄 Document: {File}", documentFileName);
 
             var classifyResultFile = await contentUnderstandingService.ClassifyAsync(classifierName, bytes, contentType);
-            await HandleClassificationResultAsync(contentUnderstandingService, classifyResultFile, logger, documentFileName);
+            await HandleAnalysisResultAsync(contentUnderstandingService, classifyResultFile, logger, documentFileName);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "❌ Failed to classify");
-        }
-    }
-
-    // NEW: Shared result handling for classification
-    private static async Task HandleClassificationResultAsync(
-        ContentUnderstandingService contentUnderstandingService,
-        (string responseContent, string operationLocation) classifyResult,
-        ILogger logger,
-        string labelForExport)
-    {
-        logger.LogInformation("✅ Classification submitted");
-        logger.LogInformation("📊 Initial Response: {Result}", classifyResult.responseContent);
-
-        if (string.IsNullOrEmpty(classifyResult.operationLocation))
-        {
-            logger.LogWarning("⚠️ No Operation-Location received; printing raw response only.");
-            var fallbackOpId = Guid.NewGuid().ToString("N");
-            await ExportAnalysisResultsAsync(classifyResult.responseContent, fallbackOpId, $"classification_{labelForExport}", logger);
-            return;
-        }
-
-        logger.LogInformation("⏳ Polling for classification results (up to 20 minutes)...");
-        try
-        {
-            var resultDoc = await contentUnderstandingService.PollResultAsync(
-                classifyResult.operationLocation,
-                timeoutSeconds: 1200,
-                pollingIntervalSeconds: 5);
-
-            var resultText = resultDoc.RootElement.GetRawText();
-
-            // Try to summarize a few likely shapes
-            logger.LogInformation("📋 Classification Summary:");
-            try
-            {
-                // Common patterns: result.classifications[] or result.contents[].classifications[]
-                if (resultDoc.RootElement.TryGetProperty("result", out var result))
-                {
-                    if (result.TryGetProperty("classifications", out var clsArr) && clsArr.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var c in clsArr.EnumerateArray())
-                        {
-                            var label = c.TryGetProperty("label", out var l) ? l.GetString() : c.TryGetProperty("category", out var cat) ? cat.GetString() : "<unknown>";
-                            var score = c.TryGetProperty("confidence", out var s) ? s.GetDouble() : (c.TryGetProperty("score", out var s2) ? s2.GetDouble() : double.NaN);
-                            logger.LogInformation("  • {Label} ({Score:P2})", label, double.IsNaN(score) ? 0 : score);
-                        }
-                    }
-                    else if (result.TryGetProperty("contents", out var contents) && contents.ValueKind == JsonValueKind.Array && contents.GetArrayLength() > 0)
-                    {
-                        var first = contents[0];
-                        if (first.TryGetProperty("classifications", out var nested) && nested.ValueKind == JsonValueKind.Array)
-                        {
-                            foreach (var c in nested.EnumerateArray())
-                            {
-                                var label = c.TryGetProperty("label", out var l) ? l.GetString() : c.TryGetProperty("category", out var cat) ? cat.GetString() : "<unknown>";
-                                var score = c.TryGetProperty("confidence", out var s) ? s.GetDouble() : (c.TryGetProperty("score", out var s2) ? s2.GetDouble() : double.NaN);
-                                logger.LogInformation("  • {Label} ({Score:P2})", label, double.IsNaN(score) ? 0 : score);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Could not parse summary from classification result");
-            }
-
-            var opId = classifyResult.operationLocation.Split('/').LastOrDefault() ?? "unknown";
-            await ExportAnalysisResultsAsync(resultText, opId, $"classification_{labelForExport}", logger);
-        }
-        catch (TimeoutException tex)
-        {
-            var opId = classifyResult.operationLocation.Split('/').LastOrDefault() ?? "unknown";
-            logger.LogWarning("⏰ {Message}", tex.Message);
-            logger.LogInformation("🆔 Operation ID: {OperationId}", opId);
-            logger.LogInformation("💡 You can check the status later using:");
-            logger.LogInformation("    dotnet run -- --mode check-operation --operation-id {OperationId}", opId);
         }
     }
 

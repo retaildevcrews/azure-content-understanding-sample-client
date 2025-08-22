@@ -73,12 +73,17 @@ public class ContentUnderstandingService
         {
             try
             {
-                var responseText = await GetAnalysisResultByLocationAsync(operationLocation);
+                var responseText = await GetPolledDataAsync(operationLocation);
                 var doc = JsonDocument.Parse(responseText);
-                if (doc.RootElement.TryGetProperty("status", out var statusProp))
+                // Try to get status in a case-insensitive manner and support alternate key 'state'
+                if (TryGetPropertyCaseInsensitive(doc.RootElement, "status", out var statusProp) ||
+                    TryGetPropertyCaseInsensitive(doc.RootElement, "state", out statusProp))
                 {
                     var status = statusProp.GetString();
-                    if (string.Equals(status, "Succeeded", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(status, "Succeeded", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(status, "Success", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(status, "Complete", StringComparison.OrdinalIgnoreCase))
                     {
                         _logger.LogInformation("Analysis Succeeded after {Elapsed:mm\\:ss}", DateTime.UtcNow - startTime);
                         return doc;
@@ -101,7 +106,16 @@ public class ContentUnderstandingService
                 }
 
                 // Still running or unknown status: wait and poll again
-                _logger.LogInformation("Polling... status: {Status}", doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : "Unknown");
+                string? statusForLog = null;
+                if (TryGetPropertyCaseInsensitive(doc.RootElement, "status", out var s1)) statusForLog = s1.GetString();
+                else if (TryGetPropertyCaseInsensitive(doc.RootElement, "state", out var s2)) statusForLog = s2.GetString();
+                _logger.LogInformation("Polling... status: {Status}", statusForLog ?? "Unknown");
+                if (statusForLog is null)
+                {
+                    // Provide a small payload snippet to aid troubleshooting
+                    var snippet = responseText.Length > 512 ? responseText.Substring(0, 512) + "..." : responseText;
+                    _logger.LogDebug("No status field detected in operation payload. Snippet: {Snippet}", snippet);
+                }
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
@@ -454,12 +468,12 @@ public class ContentUnderstandingService
     /// <summary>
     /// Gets the result of a previously submitted analysis operation
     /// </summary>
-    public async Task<string> GetAnalysisResultAsync(string operationId)
+    public async Task<string> GetOperationResultAsync(string operationId)
     {
         if (string.IsNullOrEmpty(operationId))
             throw new ArgumentException("Operation ID cannot be null or empty", nameof(operationId));
 
-        _logger.LogInformation("📊 Getting analysis result for operation: {OperationId}", operationId);
+        _logger.LogInformation("📊 Getting operation result for: {OperationId}", operationId);
         
         try
         {
@@ -473,7 +487,7 @@ public class ContentUnderstandingService
             
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("✅ Successfully retrieved analysis result for operation: {OperationId}", operationId);
+                _logger.LogInformation("✅ Successfully retrieved operation result for operation: {OperationId}", operationId);
                 return responseContent;
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -483,14 +497,14 @@ public class ContentUnderstandingService
             }
             else
             {
-                _logger.LogError("❌ Failed to get analysis result for operation {OperationId}. Status: {StatusCode}, Response: {Response}", 
+                _logger.LogError("❌ Failed to get operation result for operation {OperationId}. Status: {StatusCode}, Response: {Response}", 
                     operationId, response.StatusCode, responseContent);
-                throw new HttpRequestException($"Failed to get analysis result for operation '{operationId}': {response.StatusCode} - {responseContent}");
+                throw new HttpRequestException($"Failed to get operation result for operation '{operationId}': {response.StatusCode} - {responseContent}");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting analysis result for operation: {OperationId}", operationId);
+            _logger.LogError(ex, "Error getting operation result for operation: {OperationId}", operationId);
             throw;
         }
     }
@@ -498,12 +512,12 @@ public class ContentUnderstandingService
     /// <summary>
     /// Gets the result of a previously submitted analysis operation using the operation location URL
     /// </summary>
-    public async Task<string> GetAnalysisResultByLocationAsync(string operationLocationUrl)
+    public async Task<string> GetPolledDataAsync(string operationLocationUrl)
     {
         if (string.IsNullOrEmpty(operationLocationUrl))
             throw new ArgumentException("Operation location URL cannot be null or empty", nameof(operationLocationUrl));
 
-        _logger.LogInformation("📊 Getting analysis result from operation location: {OperationLocation}", operationLocationUrl);
+        _logger.LogInformation("📊 Getting polled operation location: {OperationLocation}", operationLocationUrl);
         
         try
         {
@@ -516,7 +530,7 @@ public class ContentUnderstandingService
             
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("✅ Successfully retrieved analysis result from operation location");
+                _logger.LogInformation("✅ Successfully retrieved polled location");
                 return responseContent;
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -526,14 +540,14 @@ public class ContentUnderstandingService
             }
             else
             {
-                _logger.LogError("❌ Failed to get analysis result from location {OperationLocation}. Status: {StatusCode}, Response: {Response}", 
+                _logger.LogError("❌ Failed to get polled location {OperationLocation}. Status: {StatusCode}, Response: {Response}", 
                     operationLocationUrl, response.StatusCode, responseContent);
-                throw new HttpRequestException($"Failed to get analysis result from location '{operationLocationUrl}': {response.StatusCode} - {responseContent}");
+                throw new HttpRequestException($"Failed to get polled location '{operationLocationUrl}': {response.StatusCode} - {responseContent}");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting analysis result from operation location: {OperationLocation}", operationLocationUrl);
+            _logger.LogError(ex, "Error getting polled location: {OperationLocation}", operationLocationUrl);
             throw;
         }
     }
@@ -543,8 +557,7 @@ public class ContentUnderstandingService
     // =========================
 
     /// <summary>
-    /// Lists all classifiers, returning a slim JSON array of { classifierId, description } objects.
-    /// Accepts either a top-level array response or an object with a 'value' array.
+    /// Lists all classifiers in the Content Understanding service
     /// </summary>
     public async Task<string> ListClassifiersAsync()
     {
@@ -556,51 +569,16 @@ public class ContentUnderstandingService
             _logger.LogDebug("GET {Url}", url);
             var response = await _httpClient.GetAsync(url);
             var content = await response.Content.ReadAsStringAsync();
-            if (!response.IsSuccessStatusCode)
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully retrieved classifiers list");
+                return content;
+            }
+            else
             {
                 _logger.LogError("❌ Failed to list classifiers. Status: {StatusCode}, Response: {Response}", response.StatusCode, content);
                 throw new HttpRequestException($"Failed to list classifiers: {response.StatusCode} - {content}");
             }
-
-            using var doc = JsonDocument.Parse(content);
-            JsonElement arrayElem;
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-            {
-                arrayElem = doc.RootElement;
-            }
-            else if (doc.RootElement.TryGetProperty("value", out var valueProp) && valueProp.ValueKind == JsonValueKind.Array)
-            {
-                arrayElem = valueProp;
-            }
-            else
-            {
-                _logger.LogWarning("Classifier list response had unexpected shape; returning empty list");
-                return "[]";
-            }
-
-            var results = new List<Dictionary<string, string?>>();
-            foreach (var item in arrayElem.EnumerateArray())
-            {
-                string? classifierId = null;
-                string? description = null;
-
-                if (item.TryGetProperty("classifierId", out var cId)) classifierId = cId.GetString();
-                else if (item.TryGetProperty("id", out var idProp)) classifierId = idProp.GetString();
-
-                if (item.TryGetProperty("description", out var descProp)) description = descProp.GetString();
-
-                if (!string.IsNullOrWhiteSpace(classifierId))
-                {
-                    results.Add(new Dictionary<string, string?>
-                    {
-                        ["classifierId"] = classifierId,
-                        ["description"] = description
-                    });
-                }
-            }
-
-            _logger.LogInformation("✅ Successfully retrieved classifiers list (slimmed)");
-            return JsonSerializer.Serialize(results);
         }
         catch (Exception ex)
         {
@@ -780,5 +758,30 @@ public class ContentUnderstandingService
     {
         _httpClient?.Dispose();
         // DefaultAzureCredential doesn't implement IDisposable
+    }
+
+    /// <summary>
+    /// Tries to get a property from a JsonElement using case-insensitive name matching.
+    /// </summary>
+    private static bool TryGetPropertyCaseInsensitive(JsonElement element, string name, out JsonElement property)
+    {
+        // Fast path: case-sensitive first
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out property))
+            return true;
+
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in element.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    property = prop.Value;
+                    return true;
+                }
+            }
+        }
+
+        property = default;
+        return false;
     }
 }
