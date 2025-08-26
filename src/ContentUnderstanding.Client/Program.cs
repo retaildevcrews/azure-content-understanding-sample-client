@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,7 @@ public class Program
             var operationId = GetArgumentValue(args, "--operation-id", "");
             var classifierFile = GetArgumentValue(args, "--classifier-file", "");
             var classifierName = GetArgumentValue(args, "--classifier", "");
+            var directoryName = GetArgumentValue(args, "--directory", "");
             
             switch (mode.ToLowerInvariant())
             {
@@ -87,6 +89,9 @@ public class Program
                     break;
                 case "classify":
                     await RunClassifyAsync(serviceProvider, classifierName, documentFile);
+                    break;
+                case "classify-dir":
+                    await RunClassifyDirectoryAsync(serviceProvider, classifierName, directoryName);
                     break;
                 case "help":
                 case "--help":
@@ -190,6 +195,7 @@ public class Program
         logger.LogInformation("  --mode classifiers      : List all classifiers");
         logger.LogInformation("  --mode create-classifier: Create classifier from JSON");
     logger.LogInformation("  --mode classify         : Classify a document with a classifier");
+        logger.LogInformation("  --mode classify-dir     : Classify all files in a directory");
         logger.LogInformation("");
         
         // TODO: Implement interactive menu for Content Understanding operations
@@ -201,7 +207,8 @@ public class Program
         logger.LogInformation("3. Create sample analyzer: dotnet run -- --mode create-analyzer");
         logger.LogInformation("4. List classifiers: dotnet run -- --mode classifiers");
         logger.LogInformation("5. Create classifier: dotnet run -- --mode create-classifier --classifier-file <file> --classifier <name>");
-    logger.LogInformation("6. Classify: dotnet run -- --mode classify --classifier <name> --document <file>");
+        logger.LogInformation("6. Classify: dotnet run -- --mode classify --classifier <name> --document <file>");
+        logger.LogInformation("7. Classify directory: dotnet run -- --mode classify-dir --classifier <name> --directory <subfolder>");
     }
 
     private static string GetArgumentValue(string[] args, string argument, string defaultValue)
@@ -867,6 +874,187 @@ public class Program
         }
     }
 
+    // NEW: Classify all supported files in a directory under Data/SampleDocuments (non-recursive)
+    private static async Task RunClassifyDirectoryAsync(IServiceProvider serviceProvider, string classifierName, string directoryName)
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
+
+        logger.LogInformation("📂 Classify directory mode...");
+        logger.LogInformation("");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(classifierName))
+            {
+                logger.LogError("❌ Please specify a classifier with --classifier <name>");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(directoryName))
+            {
+                logger.LogError("❌ Please specify a directory with --directory <subfolder>");
+                return;
+            }
+
+            var projectRoot = Directory.GetCurrentDirectory();
+            var baseDir = Path.Combine(projectRoot, "Data", "SampleDocuments");
+            var targetDir = Path.Combine(baseDir, directoryName);
+
+            if (!Directory.Exists(targetDir))
+            {
+                logger.LogError("❌ Directory not found: {Dir}", targetDir);
+                return;
+            }
+
+            // Supported file extensions
+            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"
+            };
+
+            var files = Directory.EnumerateFiles(targetDir, "*", SearchOption.TopDirectoryOnly)
+                .Where(f => allowed.Contains(Path.GetExtension(f)))
+                .OrderBy(f => f)
+                .ToList();
+
+            if (files.Count == 0)
+            {
+                logger.LogWarning("⚠️ No supported files found in {Dir}", targetDir);
+                return;
+            }
+
+            logger.LogInformation("🧠 Using classifier: {Classifier}", classifierName);
+            logger.LogInformation("📁 Directory: {Dir} ({Count} files)", directoryName, files.Count);
+
+            // Summary tracking
+            var summary = new List<BatchSummaryRow>();
+            int success = 0, failed = 0;
+
+            foreach (var filePath in files)
+            {
+                var fileName = Path.GetFileName(filePath);
+                var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                var contentType = ext switch
+                {
+                    ".pdf" => "application/pdf",
+                    ".png" => "image/png",
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".tif" or ".tiff" => "image/tiff",
+                    ".bmp" => "image/bmp",
+                    _ => "application/octet-stream"
+                };
+
+                var sw = Stopwatch.StartNew();
+                string status = "Succeeded";
+                string? operationId = null;
+                string? jsonFile = null;
+                string? txtFile = null;
+                string? error = null;
+
+                try
+                {
+                    var bytes = await File.ReadAllBytesAsync(filePath);
+                    var result = await contentUnderstandingService.ClassifyAsync(classifierName, bytes, contentType);
+
+                    // Poll and export via shared handler, but also capture the produced filenames by peeking Output directory after call
+                    // For deterministic capture, rely on handler to export and just proceed; we'll scan Output to find the newest pair for this document.
+                    await HandleAnalysisResultAsync(contentUnderstandingService, result, logger, fileName);
+
+                    operationId = result.operationLocation.Split('/').LastOrDefault();
+
+                    // Try to find the latest exported files for this fileName
+                    var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Output");
+                    if (Directory.Exists(outputDir))
+                    {
+                        var prefix = Path.GetFileNameWithoutExtension(fileName) + "_";
+                        var candidates = Directory.EnumerateFiles(outputDir, "*", SearchOption.TopDirectoryOnly)
+                            .Where(p => Path.GetFileName(p).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            .OrderByDescending(p => File.GetLastWriteTimeUtc(p))
+                            .Take(6) // small window
+                            .ToList();
+
+                        jsonFile = candidates.FirstOrDefault(p => p.EndsWith("_results.json", StringComparison.OrdinalIgnoreCase));
+                        txtFile = candidates.FirstOrDefault(p => p.EndsWith("_formatted.txt", StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    success++;
+                }
+                catch (Exception ex)
+                {
+                    status = "Failed";
+                    error = ex.Message;
+                    failed++;
+                    logger.LogError(ex, "❌ Failed to classify {File}", fileName);
+                }
+                finally
+                {
+                    sw.Stop();
+                    summary.Add(new BatchSummaryRow
+                    {
+                        File = fileName,
+                        Status = status,
+                        OperationId = operationId,
+                        JsonPath = jsonFile,
+                        TextPath = txtFile,
+                        DurationMs = sw.ElapsedMilliseconds,
+                        Error = error
+                    });
+                }
+            }
+
+            await ExportBatchSummaryAsync(directoryName, classifierName, summary, logger);
+
+            logger.LogInformation("✅ Completed: {Success} succeeded, {Failed} failed", success, failed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Failed to classify directory");
+        }
+    }
+
+    private record BatchSummaryRow
+    {
+        public string File { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public string? OperationId { get; init; }
+        public string? JsonPath { get; init; }
+        public string? TextPath { get; init; }
+        public long DurationMs { get; init; }
+        public string? Error { get; init; }
+    }
+
+    private static async Task ExportBatchSummaryAsync(string directoryName, string classifierName, List<BatchSummaryRow> rows, ILogger logger)
+    {
+        try
+        {
+            var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Output");
+            Directory.CreateDirectory(outputDir);
+
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var baseName = $"batch_{SanitizeFilePart(directoryName)}_{SanitizeFilePart(classifierName)}_{timestamp}";
+
+            // JSON summary
+            var jsonPath = Path.Combine(outputDir, baseName + "_summary.json");
+            var json = JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(jsonPath, json);
+
+            logger.LogInformation("📦 Summary exported:");
+            logger.LogInformation("   📄 JSON: {Path}", Path.GetFileName(jsonPath));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("⚠️ Failed to export batch summary: {Message}", ex.Message);
+        }
+    }
+
+    private static string SanitizeFilePart(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
+        return new string(chars);
+    }
+
     /// <summary>
     /// Displays help information about available commands and usage
     /// </summary>
@@ -887,7 +1075,8 @@ public class Program
         logger.LogInformation("  check-operation         Check the status of a specific operation");
         logger.LogInformation("  classifiers             List all classifiers");
         logger.LogInformation("  create-classifier       Create classifier from JSON schema");
-    logger.LogInformation("  classify                Classify a document with a classifier");
+        logger.LogInformation("  classify                Classify a document with a classifier");
+        logger.LogInformation("  classify-dir            Classify all files in a Data/SampleDocuments subfolder");
         logger.LogInformation("  interactive            Interactive mode with menu (default)");
         logger.LogInformation("");
         logger.LogInformation("OPTIONS:");
@@ -899,6 +1088,7 @@ public class Program
         logger.LogInformation("  --operation-id <id>    Specify operation ID for check-operation mode");
         logger.LogInformation("  --classifier <name>    Specify classifier name for classification");
         logger.LogInformation("  --classifier-file <f>  Specify classifier JSON file for create-classifier");
+        logger.LogInformation("  --directory <subdir>   Directory under Data/SampleDocuments for classify-dir");
     // --text removed: only document classification supported
         logger.LogInformation("");
         logger.LogInformation("EXAMPLES:");
@@ -910,7 +1100,8 @@ public class Program
         logger.LogInformation("  dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
         logger.LogInformation("  dotnet run -- --mode classifiers                    # List classifiers");
         logger.LogInformation("  dotnet run -- --mode create-classifier --classifier-file product-categories.json --classifier products");
-    logger.LogInformation("  dotnet run -- --mode classify --classifier products --document sample.png");
+        logger.LogInformation("  dotnet run -- --mode classify --classifier products --document sample.png");
+        logger.LogInformation("  dotnet run -- --mode classify-dir --classifier products --directory receipts");
         logger.LogInformation("");
         logger.LogInformation("FEATURES:");
         logger.LogInformation("  ✅ Complete Azure Content Understanding API integration");

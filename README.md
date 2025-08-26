@@ -42,6 +42,25 @@ dotnet run -- --mode help
 dotnet run -- --mode health
 dotnet run -- --mode create-analyzer
 dotnet run -- --mode analyze --document receipt.png
+### Classify a whole directory
+
+Classify all supported files in a subfolder under `Data/SampleDocuments` using a classifier:
+
+```pwsh
+dotnet run --project .\src\ContentUnderstanding.Client -- --mode classify-dir --classifier <name> --directory <subfolder>
+```
+
+- Non-recursive: only files directly in `<subfolder>` are processed.
+- Supported types: .pdf, .png, .jpg, .jpeg, .tif, .tiff, .bmp.
+- Sequential processing with per-file error logging; the run continues on errors.
+- Outputs: per-file JSON and formatted text results in `Output/` plus a mandatory batch summary:
+	- `batch_<directory>_<classifier>_<timestamp>_summary.json`
+
+Example:
+
+```pwsh
+dotnet run --project .\src\ContentUnderstanding.Client -- --mode classify-dir --classifier products --directory receipts
+```
 ```
 
 ## 📖 Usage Guide
