@@ -46,7 +46,6 @@ public class Program
             var operationId = GetArgumentValue(args, "--operation-id", "");
             var classifierFile = GetArgumentValue(args, "--classifier-file", "");
             var classifierName = GetArgumentValue(args, "--classifier", "");
-            var text = GetArgumentValue(args, "--text", "");
             
             switch (mode.ToLowerInvariant())
             {
@@ -87,7 +86,7 @@ public class Program
                     await RunCreateClassifierAsync(serviceProvider, classifierName, classifierFile);
                     break;
                 case "classify":
-                    await RunClassifyAsync(serviceProvider, classifierName, documentFile, text);
+                    await RunClassifyAsync(serviceProvider, classifierName, documentFile);
                     break;
                 case "help":
                 case "--help":
@@ -190,7 +189,7 @@ public class Program
         logger.LogInformation("  --mode check-operation  : Check specific operation status");
         logger.LogInformation("  --mode classifiers      : List all classifiers");
         logger.LogInformation("  --mode create-classifier: Create classifier from JSON");
-        logger.LogInformation("  --mode classify         : Classify text or documents");
+    logger.LogInformation("  --mode classify         : Classify a document with a classifier");
         logger.LogInformation("");
         
         // TODO: Implement interactive menu for Content Understanding operations
@@ -202,7 +201,7 @@ public class Program
         logger.LogInformation("3. Create sample analyzer: dotnet run -- --mode create-analyzer");
         logger.LogInformation("4. List classifiers: dotnet run -- --mode classifiers");
         logger.LogInformation("5. Create classifier: dotnet run -- --mode create-classifier --classifier-file <file> --classifier <name>");
-        logger.LogInformation("6. Classify: dotnet run -- --mode classify --classifier <name> --text \"...\" | --document <file>");
+    logger.LogInformation("6. Classify: dotnet run -- --mode classify --classifier <name> --document <file>");
     }
 
     private static string GetArgumentValue(string[] args, string argument, string defaultValue)
@@ -814,20 +813,10 @@ public class Program
                 return;
             }
 
-            // If text provided, classify text
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                logger.LogInformation("📝 Classifying text using classifier: {Classifier}", classifierName);
-
-                var classifyResult = await contentUnderstandingService.ClassifyTextAsync(classifierName, text);
-                await HandleAnalysisResultAsync(contentUnderstandingService, classifyResult, logger, "text");
-                return;
-            }
-
-            // Otherwise, require documentFile
+            // Require documentFile
             if (string.IsNullOrWhiteSpace(documentFile))
             {
-                logger.LogError("❌ Provide --text \"...\" or --document <file>");
+                logger.LogError("❌ Provide --document <file> to classify a document");
                 return;
             }
 
@@ -898,7 +887,7 @@ public class Program
         logger.LogInformation("  check-operation         Check the status of a specific operation");
         logger.LogInformation("  classifiers             List all classifiers");
         logger.LogInformation("  create-classifier       Create classifier from JSON schema");
-        logger.LogInformation("  classify                Classify text or a document with a classifier");
+    logger.LogInformation("  classify                Classify a document with a classifier");
         logger.LogInformation("  interactive            Interactive mode with menu (default)");
         logger.LogInformation("");
         logger.LogInformation("OPTIONS:");
@@ -910,7 +899,7 @@ public class Program
         logger.LogInformation("  --operation-id <id>    Specify operation ID for check-operation mode");
         logger.LogInformation("  --classifier <name>    Specify classifier name for classification");
         logger.LogInformation("  --classifier-file <f>  Specify classifier JSON file for create-classifier");
-        logger.LogInformation("  --text \"...\"          Provide inline text to classify");
+    // --text removed: only document classification supported
         logger.LogInformation("");
         logger.LogInformation("EXAMPLES:");
         logger.LogInformation("  dotnet run                                          # Interactive mode");
@@ -921,8 +910,7 @@ public class Program
         logger.LogInformation("  dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
         logger.LogInformation("  dotnet run -- --mode classifiers                    # List classifiers");
         logger.LogInformation("  dotnet run -- --mode create-classifier --classifier-file product-categories.json --classifier products");
-        logger.LogInformation("  dotnet run -- --mode classify --classifier products --text \"laptop backpack\"");
-        logger.LogInformation("  dotnet run -- --mode classify --classifier products --document sample.png");
+    logger.LogInformation("  dotnet run -- --mode classify --classifier products --document sample.png");
         logger.LogInformation("");
         logger.LogInformation("FEATURES:");
         logger.LogInformation("  ✅ Complete Azure Content Understanding API integration");

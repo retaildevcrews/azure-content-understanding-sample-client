@@ -710,46 +710,7 @@ public class ContentUnderstandingService
         }
     }
 
-    /// <summary>
-    /// Submits plain text for classification using a classifier
-    /// </summary>
-    public async Task<(string responseContent, string operationLocation)> ClassifyTextAsync(string classifierName, string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Text cannot be null or empty", nameof(text));
-
-        _logger.LogInformation("🔤 Classifying text with classifier: {ClassifierName} (Length: {Len})", classifierName, text.Length);
-        try
-        {
-            await ConfigureAuthenticationAsync();
-            var url = BuildApiUrl($"{CLASSIFIERS_PATH}/{Uri.EscapeDataString(classifierName)}{CLASSIFY_ACTION}");
-            _logger.LogDebug("POST {Url}", url);
-            // Using text/plain keeps parity with binary flow; if service requires JSON, swap to JSON payload easily.
-            var requestContent = new StringContent(text, Encoding.UTF8, "text/plain");
-            var response = await _httpClient.PostAsync(url, requestContent);
-            var responseContent = await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("✅ Successfully submitted text for classification with classifier: {ClassifierName}", classifierName);
-                var operationLocation = response.Headers.Location?.ToString() ??
-                                        (response.Headers.Contains("Operation-Location")
-                                            ? response.Headers.GetValues("Operation-Location").FirstOrDefault()
-                                            : null);
-                _logger.LogDebug("Operation-Location header: {OperationLocation}", operationLocation);
-                return (responseContent, operationLocation ?? string.Empty);
-            }
-            else
-            {
-                _logger.LogError("❌ Failed to classify text with classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, responseContent);
-                throw new HttpRequestException($"Failed to classify text with classifier '{classifierName}': {response.StatusCode} - {responseContent}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error classifying text with classifier: {ClassifierName}", classifierName);
-            throw;
-        }
-    }
+    // ClassifyTextAsync removed - document (binary) classification is the supported path
 
     /// <summary>
     /// Disposes resources

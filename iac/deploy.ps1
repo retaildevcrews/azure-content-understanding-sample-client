@@ -251,7 +251,7 @@ if ($confirmation -match "^[Yy]$") {
         Write-Host "🎉 Deployment completed successfully!" -ForegroundColor Green
         Write-Host ""
         Write-Host "📋 Next steps:" -ForegroundColor Cyan
-        Write-Host "   1. Run the C# sample application: 'cd ../src/ContentUnderstanding.Sample && dotnet run'" -ForegroundColor White
+    Write-Host "   1. Run the C# sample application: 'cd ../src/ContentUnderstanding.Client && dotnet run'" -ForegroundColor White
         Write-Host "   2. Add your sample documents to the storage account" -ForegroundColor White
         Write-Host "   3. Create and test your analyzer schemas" -ForegroundColor White
         Write-Host ""
