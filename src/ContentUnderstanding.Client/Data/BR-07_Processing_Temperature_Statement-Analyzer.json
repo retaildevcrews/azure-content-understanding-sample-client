@@ -1,0 +1,23 @@
+{
+  "description": "Analyzer for BR-07 Processing Temperature",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Supplier/company issuing the processing temperature statement." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material/raw material name covered by the statement." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Identifier/code for the material if present (e.g., RM code)." },
+      "IssueDate": { "type": "string", "method": "extract", "description": "Document issue date for the statement or guidance." },
+      "MaxRecommendedProcessingTempC": { "type": "number", "method": "extract", "description": "Maximum recommended processing temperature in °C. Parse numeric value; strip the 'C' symbol." },
+      "ShortTermToleranceTempC": { "type": "number", "method": "extract", "description": "Short-term exposure tolerance temperature in °C (higher threshold allowed briefly)." },
+      "ShortTermToleranceDuration": { "type": "string", "method": "extract", "description": "Permitted duration for short-term exposure (e.g., '<= 60 minutes'). Preserve comparator symbols." },
+      "RecommendedAdditionTempC": { "type": "number", "method": "extract", "description": "Recommended addition temperature (°C) in process context (e.g., during emulsion cool-down)." }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "description": "Analyzer for BR-09 Impurity Profile",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Analytical lab or supplier issuing the impurity/residual report (header/footer)." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material name evaluated for impurities/residual solvents." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Material identifier/code printed on the report." },
+      "Lot": { "type": "string", "method": "extract", "description": "Batch/lot identifier of the tested sample." },
+      "ReportDate": { "type": "string", "method": "extract", "description": "Report or test date for the results." },
+      "ResidualSolvents": {
+        "type": "array",
+        "method": "extract",
+        "description": "Table of residual solvents with result (ppm), LOQ, and analytical method.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Solvent": { "type": "string", "method": "extract", "description": "Name of the solvent per ICH Q3C (e.g., Ethanol, Methanol, n-Hexane)." },
+            "ContentPpm": { "type": "number", "method": "extract", "description": "Measured concentration in ppm as a numeric value. If reported as '<LOQ', leave numeric empty and rely on LOQ and Result text in SpecificImpurities." },
+            "LOQppm": { "type": "number", "method": "extract", "description": "Limit of quantitation (ppm) for the solvent." },
+            "Method": { "type": "string", "method": "extract", "description": "Analytical method/standard (e.g., GC-FID USP <467>)." }
+          }
+        }
+      },
+      "SpecificImpurities": {
+        "type": "array",
+        "method": "extract",
+        "description": "Specific named impurities with results, LOQ, and method (e.g., 1,4-Dioxane).",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Impurity": { "type": "string", "method": "extract", "description": "Name of the impurity (e.g., Ethylene Oxide, Benzo[a]pyrene)." },
+            "Result": { "type": "string", "method": "extract", "description": "Reported result text (e.g., 'ND (<0.10 ppm)'). Preserve qualifiers and comparators (ND, <, <=)." },
+            "LOQ": { "type": "string", "method": "extract", "description": "LOQ as printed including unit (e.g., '0.10 ppm'). Keep as text to preserve units and significant figures." },
+            "Method": { "type": "string", "method": "extract", "description": "Analytical method/instrument (e.g., GC-MS, HS-GC-MS, HPLC-FLD)." }
+          }
+        }
+      }
+    }
+  }
+}

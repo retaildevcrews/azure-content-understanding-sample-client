@@ -1,0 +1,33 @@
+{
+  "description": "Analyzer for BR-11 CSAR Annex 14 Composition",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Supplier/company submitting the Annex 14 composition declaration (header/footer)." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material/raw material name covered by the Annex 14 submission." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Material identifier/code if printed (supplier or internal)." },
+      "SubmissionDate": { "type": "string", "method": "extract", "description": "Submission or document date indicated on the Annex 14 form." },
+      "IngredientList": {
+        "type": "array",
+        "method": "extract",
+        "description": "Table/list of ingredients with INCI, function, and % w/w as required by CSAR Annex 14.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "INCI": { "type": "string", "method": "extract", "description": "INCI name as listed in the Annex 14 ingredient table." },
+            "Function": { "type": "string", "method": "extract", "description": "Ingredient function (e.g., Antioxidant, Emollient) as stated in the table." },
+            "Percent": { "type": "number", "method": "extract", "description": "Declared percentage by weight (% w/w). Strip '%' and keep numeric with '.' decimal." }
+          }
+        }
+      },
+      "FragranceAllergens": { "type": "array", "method": "extract", "description": "Any listed fragrance allergens as per Annex disclosure (if present). Use the allergen names exactly as printed.", "items": { "type": "string" } }
+    }
+  }
+}

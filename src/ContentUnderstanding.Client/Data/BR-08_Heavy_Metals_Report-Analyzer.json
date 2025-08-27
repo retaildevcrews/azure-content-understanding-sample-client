@@ -1,0 +1,35 @@
+{
+  "description": "Analyzer for BR-08 Heavy Metals",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Analytical laboratory or supplier issuing the Heavy Metals report (header/footer)." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material name for which heavy metals were measured." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Material identifier/code printed on the report." },
+      "Lot": { "type": "string", "method": "extract", "description": "Batch/lot identifier of the tested sample." },
+      "ReportDate": { "type": "string", "method": "extract", "description": "Report or test date for the results." },
+      "Method": { "type": "string", "method": "extract", "description": "Overall analytical technique (e.g., ICP-MS) and digestion type (Full/Partial) if stated." },
+      "Metals": {
+        "type": "array",
+        "method": "extract",
+        "description": "Per-metal results table with content in ppm and test method/digestion details.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Metal": { "type": "string", "method": "extract", "description": "Element name or symbol (e.g., Lead, Pb). Use the label from the table." },
+            "ContentPpm": { "type": "number", "method": "extract", "description": "Measured concentration in ppm. If '<LOQ', leave numeric empty and express as text in notes if needed." },
+            "LOQppm": { "type": "number", "method": "extract", "description": "Limit of quantitation in ppm for this analyte." },
+            "TestMethod": { "type": "string", "method": "extract", "description": "Per-metal method annotation, including digestion type if provided (e.g., 'ICP-MS (full digestion)')." }
+          }
+        }
+      }
+    }
+  }
+}

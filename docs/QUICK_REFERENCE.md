@@ -7,16 +7,16 @@
 dotnet run
 
 # Health check all Azure resources
-dotnet run -- --mode health
+dotnet run -- --use-cli health
 
 # Analyze with defaults (uses bundled sample document and default analyzer)
-dotnet run -- --mode analyze
+dotnet run -- --use-cli analyze
 
 # Analyze specific document
-dotnet run -- --mode analyze --document my-invoice.pdf
+dotnet run -- --use-cli analyze --document my-invoice.pdf
 
 # Check specific operation status
-dotnet run -- --mode check-operation --operation-id your-operation-id-here
+dotnet run -- --use-cli check-operation --operation-id your-operation-id-here
 ```
 
 ## 📋 Common CLI Patterns
@@ -24,32 +24,32 @@ dotnet run -- --mode check-operation --operation-id your-operation-id-here
 ### Analyzer Management
 ```bash
 # List all analyzers
-dotnet run -- --mode analyzers
+dotnet run -- --use-cli analyzers
 
 # Create analyzer from schema file
-dotnet run -- --mode create-analyzer --analyzer receipt --analyzer-file receipt.json
+dotnet run -- --use-cli create-analyzer --analyzer receipt --analyzer-file receipt.json
 ```
 
 ### Document Analysis
 ```bash
 # Quick analysis with smart defaults
-dotnet run -- --mode analyze
+dotnet run -- --use-cli analyze
 
 # Specify document only (auto-picks analyzer)
-dotnet run -- --mode analyze --document receipt.png
-dotnet run -- --mode analyze --document "C:\path\to\document.pdf"
+dotnet run -- --use-cli analyze --document receipt.png
+dotnet run -- --use-cli analyze --document "C:\path\to\document.pdf"
 
 # Specify analyzer only (uses default document)
-dotnet run -- --mode analyze --analyzer enginemanual
+dotnet run -- --use-cli analyze --analyzer enginemanual
 
 # Full control - specify both
-dotnet run -- --mode analyze --analyzer receipt --document receipt.png
+dotnet run -- --use-cli analyze --analyzer receipt --document receipt.png
 ```
 
 ### Operation Management
 ```bash
 # Check operation status
-dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5
+dotnet run -- --use-cli check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5
 
 # The system will automatically:
 # - Poll for up to 20 minutes (5s interval)
@@ -102,7 +102,7 @@ project/
 ### "Operation never completed"
 - Operations can take 15-20 minutes for complex documents
 - Check Azure portal for operation status
-- Use `--mode check-operation --operation-id <id>` to resume checking
+- Use `--use-cli check-operation --operation-id <id>` to resume checking
 
 ### "Authentication failed"
 - Run `az login` to ensure you're signed in
@@ -115,8 +115,8 @@ project/
 - Supported formats: PDF, PNG, JPG, JPEG, TIFF, BMP
 
 ### "Analyzer not found"  
-- Run `--mode analyzers` to see available analyzers
-- Create analyzer first: `--mode create --analyzer-file receipt`
+- Run `--use-cli analyzers` to see available analyzers
+- Create analyzer first: `--use-cli create-analyzer --analyzer-file receipt`
 - Use exact analyzer names from the list
 
 ## 🔍 Sample Output Interpretation
@@ -141,7 +141,7 @@ project/
 ## 💡 Pro Tips
 
 1. **Start with Interactive Mode**: `dotnet run` for guided experience
-2. **Check Health First**: `--mode health` to verify all connections
+2. **Check Health First**: `--use-cli health` to verify all connections
 3. **Use Partial Names**: `--analyzer-file engine` works for "enginemanual-Analyzer_*.json"  
 4. **Absolute Paths Work**: Use full file paths for documents outside the project
 5. **Results Persist**: Check Output/ directory for previous analysis results

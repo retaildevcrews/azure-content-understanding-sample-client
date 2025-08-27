@@ -1,0 +1,63 @@
+{
+  "description": "Analyzer for BR-05 Sourcing Certification",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Supplier/company name issuing the sourcing declaration (header/footer)." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material/raw material name covered by the sourcing declaration." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Supplier or internal material identifier, if present." },
+      "IssueDate": { "type": "string", "method": "extract", "description": "Date on which the sourcing form/declaration was issued or signed." },
+      "Components": {
+        "type": "array",
+        "method": "extract",
+        "description": "Per-component sourcing table listing each INCI and its source category and details.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "INCIName": { "type": "string", "method": "extract", "description": "INCI name for the component as printed in the sourcing table." },
+            "SourceCategory": { "type": "string", "method": "extract", "description": "Primary source category exactly as declared: Plant, Mineral, Animal, Animal-Related, Petroleum, or Microorganism." },
+            "Details": { "type": "string", "method": "extract", "description": "Source detail text (e.g., species, feedstock, extraction type). Capture genus/species when provided." }
+          }
+        }
+      },
+      "AnimalDerivedMaterials": { "type": "boolean", "method": "extract", "description": "True if the form indicates any animal-derived materials are used; False if explicitly none." },
+      "AnimalRelatedMaterials": { "type": "boolean", "method": "extract", "description": "True if the form indicates animal-related materials (e.g., milk, honey) are used; False if explicitly none." },
+      "MineralDerivedMaterials": { "type": "boolean", "method": "extract", "description": "True if any mineral-derived components are declared; otherwise False." },
+      "PetroleumDerivedMaterials": { "type": "boolean", "method": "extract", "description": "True if any petroleum-derived components are declared; otherwise False." },
+      "MicroorganismDerivedMaterials": { "type": "boolean", "method": "extract", "description": "True if any microorganism-derived components are declared; otherwise False." },
+      "ProcessingAids": {
+        "type": "array",
+        "method": "extract",
+        "description": "List any processing aids referenced by the form, including whether they contain animal or animal-related materials.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "AidName": { "type": "string", "method": "extract", "description": "Name/description of the processing aid (e.g., Nitrogen)." },
+            "ContainsAnimalOrAnimalRelated": { "type": "boolean", "method": "extract", "description": "True if the form answers 'Yes' to processing aids containing animal-derived or animal-related materials for this aid." }
+          }
+        }
+      },
+      "ContainsGMO": { "type": "boolean", "method": "extract", "description": "True if the declaration indicates the material contains GMOs; False if marked 'Non-GMO' or 'No'." },
+      "CountryOfOrigin": {
+        "type": "array",
+        "method": "extract",
+        "description": "Mapping of component INCI to country/region of origin if provided.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "INCIName": { "type": "string", "method": "extract", "description": "INCI of the component for which origin is stated." },
+            "Country": { "type": "string", "method": "extract", "description": "Country or region stated as origin (e.g., 'EU', 'Spain', 'EU/Ukraine'). Preserve composite regions as printed." }
+          }
+        }
+      },
+      "CountryOfManufacture": { "type": "string", "method": "extract", "description": "Country where the blend/material is manufactured (e.g., 'United States')." }
+    }
+  }
+}

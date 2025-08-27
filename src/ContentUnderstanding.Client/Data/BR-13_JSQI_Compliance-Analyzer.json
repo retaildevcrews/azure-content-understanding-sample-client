@@ -1,0 +1,23 @@
+{
+  "description": "Analyzer for BR-13 JSQI Compliance",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Company issuing the JSQI compliance declaration (header/footer or signature block)." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material/product name to which the JSQI statement applies." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Material identifier/code if provided in the document." },
+      "IssueDate": { "type": "string", "method": "extract", "description": "Issue/publication date of the JSQI declaration." },
+      "IsJSQICompliant": { "type": "boolean", "method": "extract", "description": "True if the document explicitly states compliance with JSQI for cosmetic use (subject to use levels/category limits); False if non-compliance or no statement." },
+      "AnimalDerivedMaterials": { "type": "boolean", "method": "extract", "description": "True if the declaration indicates presence of animal-derived materials; False if explicitly none." },
+      "ProhibitedSubstancesPresent": { "type": "boolean", "method": "extract", "description": "True if the statement lists any JSQI-prohibited substances present; False if none are declared." },
+      "RestrictedSubstancesOverLimits": { "type": "boolean", "method": "extract", "description": "True if any JSQI-restricted substances are present above allowed limits; False if none above limits." }
+    }
+  }
+}

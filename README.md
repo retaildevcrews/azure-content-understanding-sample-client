@@ -37,17 +37,19 @@ dotnet build
 # Run (interactive by default)
 dotnet run
 
-# Examples (non-interactive):
-dotnet run -- --mode help
-dotnet run -- --mode health
-dotnet run -- --mode create-analyzer
-dotnet run -- --mode analyze --document receipt.png
+# Preferred: subcommands (System.CommandLine)
+dotnet run -- --use-cli health
+dotnet run -- --use-cli analyzers
+dotnet run -- --use-cli analyze --analyzer receipt --document receipt1.pdf
+dotnet run -- --use-cli classifiers
+dotnet run -- --use-cli classify --classifier <name> --document <file>
+dotnet run -- --use-cli classify-dir --classifier <name> --directory <subfolder>
 ### Classify a whole directory
 
 Classify all supported files in a subfolder under `Data/SampleDocuments` using a classifier:
 
 ```pwsh
-dotnet run --project .\src\ContentUnderstanding.Client -- --mode classify-dir --classifier <name> --directory <subfolder>
+dotnet run --project .\src\ContentUnderstanding.Client -- --use-cli classify-dir --classifier <name> --directory <subfolder>
 ```
 
 - Non-recursive: only files directly in `<subfolder>` are processed.
@@ -59,7 +61,7 @@ dotnet run --project .\src\ContentUnderstanding.Client -- --mode classify-dir --
 Example:
 
 ```pwsh
-dotnet run --project .\src\ContentUnderstanding.Client -- --mode classify-dir --classifier products --directory receipts
+dotnet run --project .\src\ContentUnderstanding.Client -- --use-cli classify-dir --classifier products --directory receipts
 ```
 ```
 
@@ -67,49 +69,49 @@ dotnet run --project .\src\ContentUnderstanding.Client -- --mode classify-dir --
 
 ### Command-Line Interface
 
-The application supports multiple execution modes with flexible parameterization:
+Preferred: subcommands via System.CommandLine
 
 ```powershell
 # Interactive mode with guided menu (default)
 dotnet run
 
-# Show comprehensive help with examples
-dotnet run -- --mode help
+# Show comprehensive help
+dotnet run -- --use-cli health
 
 # Health check all Azure resources
-dotnet run -- --mode health
+dotnet run -- --use-cli health
 
 # List all available analyzers
-dotnet run -- --mode analyzers
+dotnet run -- --use-cli analyzers
 ```
 
 ### Creating Analyzers
 
 ```powershell
 # Create default analyzer (receipt)
-dotnet run -- --mode create-analyzer
+dotnet run -- --use-cli create-analyzer
 
 # Create specific analyzer by file name
-dotnet run -- --mode create-analyzer --analyzer-file receipt.json
+dotnet run -- --use-cli create-analyzer --analyzer-file receipt.json
 ```
 
 ### Document Analysis
 
 ```powershell
 # Use all defaults (receipt1.pdf + receipt analyzer)
-dotnet run -- --mode analyze
+dotnet run -- --use-cli analyze
 
 # Document-specific analysis
-dotnet run -- --mode analyze --document receipt.png
+dotnet run -- --use-cli analyze --document receipt.png
 
 # Analyzer-specific analysis
-dotnet run -- --mode analyze --analyzer enginemanual
+dotnet run -- --use-cli analyze --analyzer enginemanual
 
 # Full control
-dotnet run -- --mode analyze --analyzer receipt --document receipt.png
+dotnet run -- --use-cli analyze --analyzer receipt --document receipt.png
 
 # Use absolute paths for documents outside the project
-dotnet run -- --mode analyze --document "C:\\path\\to\\my\\document.pdf"
+dotnet run -- --use-cli analyze --document "C:\\path\\to\\my\\document.pdf"
 ```
 
 ### Supported File Formats
@@ -120,30 +122,23 @@ The application automatically detects content types for:
 
 ## 📋 CLI Reference
 
-Complete command syntax:
+Preferred subcommands:
 
 ```powershell
-dotnet run [-- --mode <mode>] [options]
+dotnet run -- --use-cli <command> [options]
 ```
 
-Available modes:
+Common commands:
 
-| Mode | Aliases | Description |
-|------|---------|-------------|
-| `help` | `--help`, `-h` | Show comprehensive help information |
-| `health` | `healthcheck` | Run comprehensive health check of Azure resources |
-| `analyzers` | `list` | List all available analyzers in the service |
-| `create-analyzer` | `create` | Create analyzer from JSON schema files |
-| `analyze` | `test-analysis` | Analyze documents with specified parameters |
-| `interactive` | (default) | Interactive mode with guided menu |
-
-Available options:
-
-| Option | Description | Used With |
-|--------|-------------|-----------|
-| `--analyzer-file <file>` | Specify analyzer JSON file (supports partial names) | `create-analyzer` |
-| `--analyzer <name>` | Specify analyzer name for analysis | `analyze` |
-| `--document <file>` | Specify document file (filename or absolute path) | `analyze` |
+- health
+- analyzers
+- analyze --analyzer <name> --document <file>
+- check-operation --operation-id <id>
+- classifiers
+- create-classifier --classifier <name> --classifier-file <file>
+- create-analyzer --analyzer <name> --analyzer-file <file>
+- classify --classifier <name> --document <file>
+- classify-dir --classifier <name> --directory <subfolder>
 
 ## Examples by Use Case
 
@@ -153,37 +148,37 @@ Available options:
 dotnet run
 
 # Show help
-dotnet run -- --mode help
+dotnet run -- --use-cli health
 ```
 
 **Health & Status:**
 ```powershell
 # Check configured Azure resources and connectivity
-dotnet run -- --mode health
+dotnet run -- --use-cli health
 
 # List available analyzers
-dotnet run -- --mode analyzers
+dotnet run -- --use-cli analyzers
 ```
 
 **Create Analyzers:**
 ```powershell
 # Create the default sample analyzer
-dotnet run -- --mode create-analyzer
+dotnet run -- --use-cli create-analyzer
 
 # Create from a specific analyzer JSON file (partial name allowed)
-dotnet run -- --mode create-analyzer --analyzer-file receipt
+dotnet run -- --use-cli create-analyzer --analyzer-file receipt
 ```
 
 **Document Analysis:**
 ```powershell
 # Analyze using defaults (uses sample document + default analyzer)
-dotnet run -- --mode analyze
+dotnet run -- --use-cli analyze
 
 # Analyze a specific document file
-dotnet run -- --mode analyze --document receipt.png
+dotnet run -- --use-cli analyze --document receipt.png
 
 # Use a specific analyzer and document
-dotnet run -- --mode analyze --analyzer receipt --document receipt.png
+dotnet run -- --use-cli analyze --analyzer receipt --document receipt.png
 ```
 
 ## Project layout

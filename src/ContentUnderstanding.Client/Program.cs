@@ -9,8 +9,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Hosting;
 using ContentUnderstanding.Client.Services;
 using ContentUnderstanding.Client.Data;
+using ContentUnderstanding.Client.Utilities;
+using ContentUnderstanding.Client.Models;
+using System.CommandLine;
+using ContentUnderstanding.Client.Commands;
 
 namespace ContentUnderstanding.Client;
 
@@ -18,20 +23,32 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
-        // Build configuration
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true)
-            .AddEnvironmentVariables()
-            .AddCommandLine(args)
+        // Bootstrap host (configuration, logging, DI)
+        using var host = Host.CreateDefaultBuilder(args)
+            .ConfigureAppConfiguration(cfg =>
+            {
+                cfg.Sources.Clear();
+                cfg.SetBasePath(Directory.GetCurrentDirectory());
+                cfg.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+                cfg.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true);
+                cfg.AddEnvironmentVariables();
+                cfg.AddCommandLine(args);
+            })
+            .ConfigureLogging(builder =>
+            {
+                builder.ClearProviders();
+                builder.AddConsole();
+                builder.AddDebug();
+                builder.SetMinimumLevel(LogLevel.Information);
+            })
+            .ConfigureServices((ctx, services) =>
+            {
+                ConfigureServices(services, ctx.Configuration);
+            })
             .Build();
 
-        // Build service provider
-        var services = new ServiceCollection();
-        ConfigureServices(services, configuration);
-        var serviceProvider = services.BuildServiceProvider();
-
+        using var scope = host.Services.CreateScope();
+        var serviceProvider = scope.ServiceProvider;
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         
         try
@@ -39,69 +56,19 @@ public class Program
             logger.LogInformation("Azure Content Understanding C# Sample Application");
             logger.LogInformation("==================================================");
 
-            // Parse command line arguments
-            var mode = GetArgumentValue(args, "--mode", "interactive");
-            var analyzerFile = GetArgumentValue(args, "--analyzer-file", "");
-            var analyzerName = GetArgumentValue(args, "--analyzer", "");
-            var documentFile = GetArgumentValue(args, "--document", "");
-            var operationId = GetArgumentValue(args, "--operation-id", "");
-            var classifierFile = GetArgumentValue(args, "--classifier-file", "");
-            var classifierName = GetArgumentValue(args, "--classifier", "");
-            var directoryName = GetArgumentValue(args, "--directory", "");
-            
-            switch (mode.ToLowerInvariant())
+            // If any args are provided, run the CLI subcommands; otherwise, show interactive overview
+            if (args.Length > 0)
             {
-                case "health":
-                case "healthcheck":
-                    await RunHealthCheckAsync(serviceProvider);
-                    break;
-                case "analyzers":
-                case "list-analyzers":
-                    await RunListAnalyzersAsync(serviceProvider);
-                    break;
-                case "create-analyzer":
-                case "create":
-                    await RunCreateAnalyzerAsync(serviceProvider, analyzerName, analyzerFile);
-                    break;
-                case "test-analysis":
-                case "analyze":
-                    if (!string.IsNullOrWhiteSpace(analyzerName) || !string.IsNullOrWhiteSpace(documentFile))
-                    {
-                        await RunAnalysisAsync(serviceProvider, analyzerName, documentFile);
-                    }
-                    else
-                    {
-                        // No parameters provided: run the default test (receipt analyzer + sample file)
-                        await RunTestAnalysisAsync(serviceProvider);
-                    }
-                    break;
-                case "check-operation":
-                case "operation":
-                    await RunCheckOperationAsync(serviceProvider, operationId);
-                    break;
-                case "classifiers":
-                case "list-classifiers":
-                    await RunListClassifiersAsync(serviceProvider);
-                    break;
-                case "create-classifier":
-                case "create-clf":
-                    await RunCreateClassifierAsync(serviceProvider, classifierName, classifierFile);
-                    break;
-                case "classify":
-                    await RunClassifyAsync(serviceProvider, classifierName, documentFile);
-                    break;
-                case "classify-dir":
-                    await RunClassifyDirectoryAsync(serviceProvider, classifierName, directoryName);
-                    break;
-                case "help":
-                case "--help":
-                case "-h":
-                    DisplayHelpInformation(logger);
-                    break;
-                case "interactive":
-                default:
-                    await RunInteractiveModeAsync(serviceProvider);
-                    break;
+                // Strip legacy convenience tokens if present
+                var filteredArgs = args
+                    .Where(a => !a.Equals("--use-cli", StringComparison.OrdinalIgnoreCase) && !a.Equals("cli", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var root = Cli.BuildRoot(serviceProvider);
+                await root.InvokeAsync(filteredArgs);
+            }
+            else
+            {
+                await RunInteractiveModeAsync(serviceProvider);
             }
         }
         catch (Exception ex)
@@ -111,7 +78,7 @@ public class Program
         }
     }
 
-    private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    internal static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton(configuration);
         services.AddLogging(builder =>
@@ -123,13 +90,15 @@ public class Program
 
         // Register application services
         services.AddScoped<HealthCheckService>();
-        services.AddScoped<ContentUnderstandingService>();
+    services.AddScoped<ContentUnderstandingService>();
+    services.AddScoped<ResultExporter>();
+    services.AddScoped<BatchSummaryWriter>();
         
         // TODO: Add other services as they are implemented
         // services.AddScoped<ContentUnderstandingService>();
     }
 
-    private static async Task RunHealthCheckAsync(IServiceProvider serviceProvider)
+    internal static async Task RunHealthCheckAsync(IServiceProvider serviceProvider)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var healthCheckService = serviceProvider.GetRequiredService<HealthCheckService>();
@@ -172,7 +141,7 @@ public class Program
         if (healthResult.OverallStatus == "Failed")
         {
             logger.LogError("❌ Health check failed. Please fix issues before proceeding.");
-            logger.LogInformation("Run with --mode health for detailed diagnostics.");
+            logger.LogInformation("Run: dotnet run -- --use-cli health for detailed diagnostics.");
             return;
         }
         else if (healthResult.OverallStatus == "Warning")
@@ -185,141 +154,36 @@ public class Program
         }
 
         logger.LogInformation("");
-        logger.LogInformation("Available commands:");
-        logger.LogInformation("  --mode health           : Run comprehensive health check");
-        logger.LogInformation("  --mode interactive      : Interactive mode (default)");
-        logger.LogInformation("  --mode analyzers        : List all analyzers");
-        logger.LogInformation("  --mode create-analyzer  : Create sample analyzer");
-        logger.LogInformation("  --mode test-analysis    : Test document analysis");
-        logger.LogInformation("  --mode check-operation  : Check specific operation status");
-        logger.LogInformation("  --mode classifiers      : List all classifiers");
-        logger.LogInformation("  --mode create-classifier: Create classifier from JSON");
-    logger.LogInformation("  --mode classify         : Classify a document with a classifier");
-        logger.LogInformation("  --mode classify-dir     : Classify all files in a directory");
+        logger.LogInformation("Available subcommands (preferred):");
+        logger.LogInformation("  health                   Run comprehensive health check");
+        logger.LogInformation("  analyzers                List all analyzers");
+        logger.LogInformation("  create-analyzer          Create analyzer from JSON");
+        logger.LogInformation("  analyze                  Analyze a document");
+        logger.LogInformation("  check-operation          Check specific operation status");
+        logger.LogInformation("  classifiers              List all classifiers");
+        logger.LogInformation("  create-classifier        Create classifier from JSON");
+        logger.LogInformation("  classify                 Classify a document with a classifier");
+        logger.LogInformation("  classify-dir             Classify all files in a directory");
         logger.LogInformation("");
         
         // TODO: Implement interactive menu for Content Understanding operations
         logger.LogInformation("🚧 Content Understanding operations ready for testing...");
         logger.LogInformation("");
         logger.LogInformation("Next steps:");
-        logger.LogInformation("1. Run health check: dotnet run -- --mode health");
-        logger.LogInformation("2. List analyzers: dotnet run -- --mode analyzers");
-        logger.LogInformation("3. Create sample analyzer: dotnet run -- --mode create-analyzer");
-        logger.LogInformation("4. List classifiers: dotnet run -- --mode classifiers");
-        logger.LogInformation("5. Create classifier: dotnet run -- --mode create-classifier --classifier-file <file> --classifier <name>");
-        logger.LogInformation("6. Classify: dotnet run -- --mode classify --classifier <name> --document <file>");
-        logger.LogInformation("7. Classify directory: dotnet run -- --mode classify-dir --classifier <name> --directory <subfolder>");
+        logger.LogInformation("1. Run health check: dotnet run -- --use-cli health");
+        logger.LogInformation("2. List analyzers: dotnet run -- --use-cli analyzers");
+        logger.LogInformation("3. Create sample analyzer: dotnet run -- --use-cli create-analyzer");
+        logger.LogInformation("4. List classifiers: dotnet run -- --use-cli classifiers");
+        logger.LogInformation("5. Create classifier: dotnet run -- --use-cli create-classifier --classifier-file <file> --classifier <name>");
+        logger.LogInformation("6. Classify: dotnet run -- --use-cli classify --classifier <name> --document <file>");
+        logger.LogInformation("7. Classify directory: dotnet run -- --use-cli classify-dir --classifier <name> --directory <subfolder>");
     }
 
-    private static string GetArgumentValue(string[] args, string argument, string defaultValue)
-    {
-        for (int i = 0; i < args.Length - 1; i++)
-        {
-            if (args[i].Equals(argument, StringComparison.OrdinalIgnoreCase))
-            {
-                return args[i + 1];
-            }
-        }
-        return defaultValue;
-    }
+    // Legacy argument parsing removed; use System.CommandLine subcommands
 
-    /// <summary>
-    /// Extracts a readable value from a Content Understanding field element
-    /// </summary>
-    private static string ExtractFieldValue(JsonElement field)
-    {
-        try
-        {
-            // Handle different field types based on the "type" property
-            if (field.TryGetProperty("type", out var typeElement))
-            {
-                var fieldType = typeElement.GetString();
-                
-                return fieldType?.ToLowerInvariant() switch
-                {
-                    "string" when field.TryGetProperty("valueString", out var stringValue) => 
-                        stringValue.GetString() ?? "N/A",
-                    
-                    "number" when field.TryGetProperty("valueNumber", out var numberValue) => 
-                        numberValue.GetDouble().ToString("F2"),
-                    
-                    "array" when field.TryGetProperty("valueArray", out var arrayValue) => 
-                        ExtractArrayValue(arrayValue),
-                    
-                    "object" when field.TryGetProperty("valueObject", out var objectValue) => 
-                        ExtractObjectValue(objectValue),
-                    
-                    _ => field.ToString() // Fallback to raw JSON
-                };
-            }
-            
-            // Fallback: try common properties
-            if (field.TryGetProperty("valueString", out var fallbackString))
-                return fallbackString.GetString() ?? "N/A";
-            
-            if (field.TryGetProperty("content", out var content))
-                return content.GetString() ?? "N/A";
-            
-            return field.ToString();
-        }
-        catch
-        {
-            return "Parse Error";
-        }
-    }
+    // Field extraction moved to Utilities.FieldExtractor
 
-    /// <summary>
-    /// Extracts a readable value from an array field
-    /// </summary>
-    private static string ExtractArrayValue(JsonElement arrayElement)
-    {
-        try
-        {
-            var items = new List<string>();
-            foreach (var item in arrayElement.EnumerateArray())
-            {
-                if (item.TryGetProperty("type", out var itemType) && itemType.GetString() == "object")
-                {
-                    if (item.TryGetProperty("valueObject", out var valueObject))
-                    {
-                        items.Add(ExtractObjectValue(valueObject));
-                    }
-                }
-                else
-                {
-                    items.Add(ExtractFieldValue(item));
-                }
-            }
-            return items.Count > 0 ? string.Join("; ", items) : "Empty Array";
-        }
-        catch
-        {
-            return "Array Parse Error";
-        }
-    }
-
-    /// <summary>
-    /// Extracts a readable value from an object field
-    /// </summary>
-    private static string ExtractObjectValue(JsonElement objectElement)
-    {
-        try
-        {
-            var properties = new List<string>();
-            foreach (var property in objectElement.EnumerateObject())
-            {
-                var value = ExtractFieldValue(property.Value);
-                properties.Add($"{property.Name}: {value}");
-            }
-            return properties.Count > 0 ? $"[{string.Join(", ", properties)}]" : "Empty Object";
-        }
-        catch
-        {
-            return "Object Parse Error";
-        }
-    }
-
-    private static async Task RunListAnalyzersAsync(IServiceProvider serviceProvider)
+    internal static async Task RunListAnalyzersAsync(IServiceProvider serviceProvider)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -349,7 +213,7 @@ public class Program
         }
     }
 
-    private static async Task RunCreateAnalyzerAsync(IServiceProvider serviceProvider, string analyzername, string analyzerFile)
+    internal static async Task RunCreateAnalyzerAsync(IServiceProvider serviceProvider, string analyzername, string analyzerFile)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -397,7 +261,7 @@ public class Program
     }
 
     // Parameter-driven analysis (requires analyzer and document)
-    private static async Task RunAnalysisAsync(IServiceProvider serviceProvider, string analyzerName, string documentFile)
+    internal static async Task RunAnalysisAsync(IServiceProvider serviceProvider, string analyzerName, string documentFile)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -418,8 +282,8 @@ public class Program
 
         try
         {
-            var projectRoot = Directory.GetCurrentDirectory();
-            var sampleDocumentsPath = Path.Combine(projectRoot, "Data", "SampleDocuments");
+            var projectRoot = PathResolver.ProjectRoot();
+            var sampleDocumentsPath = PathResolver.SampleDocumentsDir();
 
             string targetDocumentPath;
             string documentFileName;
@@ -445,23 +309,15 @@ public class Program
             logger.LogInformation("🧠 Using analyzer: {Analyzer}", analyzerName);
             logger.LogInformation("📄 Document: {File}", documentFileName);
 
-            var ext = Path.GetExtension(targetDocumentPath).ToLowerInvariant();
-            var contentType = ext switch
-            {
-                ".pdf" => "application/pdf",
-                ".png" => "image/png",
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".tiff" or ".tif" => "image/tiff",
-                ".bmp" => "image/bmp",
-                _ => "application/octet-stream"
-            };
+            var contentType = MimeTypeProvider.GetContentType(targetDocumentPath);
 
             var analysisResult = await contentUnderstandingService.AnalyzeDocumentAsync(
                 analyzerName,
                 documentData,
                 contentType);
 
-            await HandleAnalysisResultAsync(contentUnderstandingService, analysisResult, logger, documentFileName);
+            var exporter = serviceProvider.GetRequiredService<ResultExporter>();
+            await HandleAnalysisResultAsync(contentUnderstandingService, analysisResult, logger, documentFileName, exporter);
         }
         catch (Exception ex)
         {
@@ -470,7 +326,7 @@ public class Program
     }
 
     // Existing: Default test analysis that picks a known analyzer and sample file when none are provided
-    private static async Task RunTestAnalysisAsync(IServiceProvider serviceProvider)
+    internal static async Task RunTestAnalysisAsync(IServiceProvider serviceProvider)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -480,8 +336,8 @@ public class Program
 
         try
         {
-            var projectRoot = Directory.GetCurrentDirectory();
-            var sampleDocumentsPath = Path.Combine(projectRoot, "Data", "SampleDocuments");
+            var projectRoot = PathResolver.ProjectRoot();
+            var sampleDocumentsPath = PathResolver.SampleDocumentsDir();
             var targetDocumentPath = Path.Combine(sampleDocumentsPath, "receipt1.pdf");
             var documentFileName = "receipt1.pdf";
 
@@ -530,7 +386,8 @@ public class Program
                 documentData,
                 contentType);
 
-            await HandleAnalysisResultAsync(contentUnderstandingService, analysisResult, logger, documentFileName);
+            var exporter = serviceProvider.GetRequiredService<ResultExporter>();
+            await HandleAnalysisResultAsync(contentUnderstandingService, analysisResult, logger, documentFileName, exporter);
         }
         catch (Exception ex)
         {
@@ -539,11 +396,12 @@ public class Program
     }
     
     // Shared result handling for analysis operations
-    private static async Task HandleAnalysisResultAsync(
+    internal static async Task<(string? operationId, string? jsonPath, string? textPath)> HandleAnalysisResultAsync(
         ContentUnderstandingService contentUnderstandingService,
         (string responseContent, string operationLocation) analysisResult,
         ILogger logger,
-        string documentFileName)
+        string documentFileName,
+        ResultExporter exporter)
     {
         logger.LogInformation("✅ Analysis submitted successfully!");
         logger.LogInformation("📊 Initial Response: {Result}", analysisResult.responseContent);
@@ -572,11 +430,11 @@ public class Program
                         contents.GetArrayLength() > 0)
                     {
                         var firstContent = contents[0];
-                        if (firstContent.TryGetProperty("fields", out var fields))
+            if (firstContent.TryGetProperty("fields", out var fields))
                         {
                             foreach (var field in fields.EnumerateObject())
                             {
-                                var fieldValue = ExtractFieldValue(field.Value);
+                var fieldValue = FieldExtractor.ExtractFieldValue(field.Value);
                                 logger.LogInformation("  • {FieldName}: {FieldValue}", field.Name, fieldValue);
                             }
                         }
@@ -589,10 +447,17 @@ public class Program
 
                     // Extract operation ID for reference
                     var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                    logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
+                    var cleanedOperationId = CleanOperationId(operationId);
+                    logger.LogInformation("🆔 Operation ID: {OperationId}", cleanedOperationId);
 
-                    // Export results to files
-                    await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
+                    // Export results to files via ResultExporter
+                    var outputDir = PathResolver.OutputDir();
+                    var export = await exporter.ExportAsync(resultDoc, outputDir, documentFileName, cleanedOperationId);
+                    logger.LogInformation("💾 Results exported to Output folder:");
+                    logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
+                    logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                    logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
+                    return (cleanedOperationId, export.jsonPath, export.formattedPath);
                 }
                 catch (Exception parseEx)
                 {
@@ -602,21 +467,31 @@ public class Program
 
                     // Still try to export raw results
                     var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
-                    await ExportAnalysisResultsAsync(resultResponse, operationId ?? "unknown", documentFileName, logger);
+                    var cleanedOperationId = CleanOperationId(operationId);
+                    var outputDir = PathResolver.OutputDir();
+                    var export = await exporter.ExportAsync(resultDoc, outputDir, documentFileName, cleanedOperationId);
+                    logger.LogInformation("💾 Results exported to Output folder:");
+                    logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
+                    logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                    logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
+                    return (cleanedOperationId, export.jsonPath, export.formattedPath);
                 }
             }
             catch (TimeoutException tex)
             {
                 var operationId = analysisResult.operationLocation.Split('/').LastOrDefault();
+                var cleanedOperationId = CleanOperationId(operationId);
                 logger.LogWarning("⏰ {Message}", tex.Message);
-                logger.LogInformation("🆔 Operation ID: {OperationId}", operationId);
+                logger.LogInformation("🆔 Operation ID: {OperationId}", cleanedOperationId);
                 logger.LogInformation("💡 You can check the status later using:");
-                logger.LogInformation("    dotnet run -- --mode check-operation --operation-id {OperationId}", operationId);
+                logger.LogInformation("    dotnet run -- --use-cli check-operation --operation-id {OperationId}", cleanedOperationId);
                 logger.LogInformation("💡 Or check the Azure portal for completion status.");
+                return (cleanedOperationId, null, null);
             }
             catch (InvalidOperationException ioex)
             {
                 logger.LogError("❌ Analysis failed: {Message}", ioex.Message);
+                return (null, null, null);
             }
         }
         else
@@ -636,13 +511,14 @@ public class Program
             {
                 logger.LogDebug(parseEx, "Could not parse operation ID from response");
             }
+            return (null, null, null);
         }
     }
     
     /// <summary>
     /// Checks the status of a specific Content Understanding operation
     /// </summary>
-    private static async Task RunCheckOperationAsync(IServiceProvider serviceProvider, string operationId = "")
+    internal static async Task RunCheckOperationAsync(IServiceProvider serviceProvider, string operationId = "")
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -651,16 +527,17 @@ public class Program
         {
             if (string.IsNullOrEmpty(operationId))
             {
-                logger.LogError("❌ Operation ID is required for check-operation mode");
-                logger.LogInformation("💡 Usage: dotnet run -- --mode check-operation --operation-id <operation-id>");
-                logger.LogInformation("💡 Example: dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
+                logger.LogError("❌ Operation ID is required for check-operation command");
+                logger.LogInformation("💡 Usage: dotnet run -- --use-cli check-operation --operation-id <operation-id>");
+                logger.LogInformation("💡 Example: dotnet run -- --use-cli check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
                 return;
             }
 
-            logger.LogInformation("🔍 Checking operation: {OperationId}", operationId);
+            var cleanedOperationId = CleanOperationId(operationId);
+            logger.LogInformation("🔍 Checking operation: {OperationId}", cleanedOperationId);
 
             // Try to get the operation result directly
-            var resultResponse = await contentUnderstandingService.GetOperationResultAsync(operationId);
+            var resultResponse = await contentUnderstandingService.GetOperationResultAsync(cleanedOperationId!);
             var resultDoc = System.Text.Json.JsonDocument.Parse(resultResponse);
             var currentStatus = resultDoc.RootElement.GetProperty("status").GetString();
 
@@ -693,7 +570,16 @@ public class Program
                         }
                         
                         // Export results for check-operation mode too
-                        await ExportAnalysisResultsAsync(resultResponse, operationId, $"operation_{operationId}", logger);
+                        var exporter = serviceProvider.GetRequiredService<ResultExporter>();
+                        using (var exportDoc = JsonDocument.Parse(resultResponse))
+                        {
+                            var outputDir = PathResolver.OutputDir();
+                            var export = await exporter.ExportAsync(exportDoc, outputDir, $"operation_{cleanedOperationId}", cleanedOperationId);
+                            logger.LogInformation("💾 Results exported to Output folder:");
+                            logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
+                            logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                            logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
+                        }
                     }
                     catch
                     {
@@ -701,7 +587,16 @@ public class Program
                         logger.LogInformation("📋 Operation completed - check Azure portal for detailed results");
                         
                         // Still try to export raw results
-                        await ExportAnalysisResultsAsync(resultResponse, operationId, $"operation_{operationId}", logger);
+                        var exporter = serviceProvider.GetRequiredService<ResultExporter>();
+                        using (var exportDoc = JsonDocument.Parse(resultResponse))
+                        {
+                            var outputDir = PathResolver.OutputDir();
+                            var export = await exporter.ExportAsync(exportDoc, outputDir, $"operation_{cleanedOperationId}", cleanedOperationId);
+                            logger.LogInformation("💾 Results exported to Output folder:");
+                            logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
+                            logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                            logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
+                        }
                     }
                     break;
 
@@ -733,7 +628,7 @@ public class Program
         }
     }
     
-    private static async Task RunListClassifiersAsync(IServiceProvider serviceProvider)
+    internal static async Task RunListClassifiersAsync(IServiceProvider serviceProvider)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -755,7 +650,7 @@ public class Program
     }
 
     // NEW: Create classifier from JSON
-    private static async Task RunCreateClassifierAsync(IServiceProvider serviceProvider, string classifierName, string classifierFile)
+    internal static async Task RunCreateClassifierAsync(IServiceProvider serviceProvider, string classifierName, string classifierFile)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -804,7 +699,7 @@ public class Program
     }
 
     // NEW: Classify content (file or text)
-    private static async Task RunClassifyAsync(IServiceProvider serviceProvider, string classifierName, string documentFile, string text = "")
+    internal static async Task RunClassifyAsync(IServiceProvider serviceProvider, string classifierName, string documentFile, string text = "")
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -827,8 +722,8 @@ public class Program
                 return;
             }
 
-            var projectRoot = Directory.GetCurrentDirectory();
-            var sampleDocumentsPath = Path.Combine(projectRoot, "Data", "SampleDocuments");
+            var projectRoot = PathResolver.ProjectRoot();
+            var sampleDocumentsPath = PathResolver.SampleDocumentsDir();
 
             string targetDocumentPath;
             string documentFileName;
@@ -851,22 +746,14 @@ public class Program
             }
 
             var bytes = await File.ReadAllBytesAsync(targetDocumentPath);
-            var ext = Path.GetExtension(targetDocumentPath).ToLowerInvariant();
-            var contentType = ext switch
-            {
-                ".pdf" => "application/pdf",
-                ".png" => "image/png",
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".tiff" or ".tif" => "image/tiff",
-                ".bmp" => "image/bmp",
-                _ => "application/octet-stream"
-            };
+            var contentType = MimeTypeProvider.GetContentType(targetDocumentPath);
 
             logger.LogInformation("🧠 Using classifier: {Classifier}", classifierName);
             logger.LogInformation("📄 Document: {File}", documentFileName);
 
             var classifyResultFile = await contentUnderstandingService.ClassifyAsync(classifierName, bytes, contentType);
-            await HandleAnalysisResultAsync(contentUnderstandingService, classifyResultFile, logger, documentFileName);
+            var exporter = serviceProvider.GetRequiredService<ResultExporter>();
+            await HandleAnalysisResultAsync(contentUnderstandingService, classifyResultFile, logger, documentFileName, exporter);
         }
         catch (Exception ex)
         {
@@ -875,7 +762,7 @@ public class Program
     }
 
     // NEW: Classify all supported files in a directory under Data/SampleDocuments (non-recursive)
-    private static async Task RunClassifyDirectoryAsync(IServiceProvider serviceProvider, string classifierName, string directoryName)
+    internal static async Task RunClassifyDirectoryAsync(IServiceProvider serviceProvider, string classifierName, string directoryName)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -897,8 +784,8 @@ public class Program
                 return;
             }
 
-            var projectRoot = Directory.GetCurrentDirectory();
-            var baseDir = Path.Combine(projectRoot, "Data", "SampleDocuments");
+            var projectRoot = PathResolver.ProjectRoot();
+            var baseDir = PathResolver.SampleDocumentsDir();
             var targetDir = Path.Combine(baseDir, directoryName);
 
             if (!Directory.Exists(targetDir))
@@ -931,19 +818,11 @@ public class Program
             var summary = new List<BatchSummaryRow>();
             int success = 0, failed = 0;
 
+            var exporter = serviceProvider.GetRequiredService<ResultExporter>();
             foreach (var filePath in files)
             {
                 var fileName = Path.GetFileName(filePath);
-                var ext = Path.GetExtension(filePath).ToLowerInvariant();
-                var contentType = ext switch
-                {
-                    ".pdf" => "application/pdf",
-                    ".png" => "image/png",
-                    ".jpg" or ".jpeg" => "image/jpeg",
-                    ".tif" or ".tiff" => "image/tiff",
-                    ".bmp" => "image/bmp",
-                    _ => "application/octet-stream"
-                };
+                var contentType = MimeTypeProvider.GetContentType(filePath);
 
                 var sw = Stopwatch.StartNew();
                 string status = "Succeeded";
@@ -959,24 +838,10 @@ public class Program
 
                     // Poll and export via shared handler, but also capture the produced filenames by peeking Output directory after call
                     // For deterministic capture, rely on handler to export and just proceed; we'll scan Output to find the newest pair for this document.
-                    await HandleAnalysisResultAsync(contentUnderstandingService, result, logger, fileName);
-
-                    operationId = result.operationLocation.Split('/').LastOrDefault();
-
-                    // Try to find the latest exported files for this fileName
-                    var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Output");
-                    if (Directory.Exists(outputDir))
-                    {
-                        var prefix = Path.GetFileNameWithoutExtension(fileName) + "_";
-                        var candidates = Directory.EnumerateFiles(outputDir, "*", SearchOption.TopDirectoryOnly)
-                            .Where(p => Path.GetFileName(p).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                            .OrderByDescending(p => File.GetLastWriteTimeUtc(p))
-                            .Take(6) // small window
-                            .ToList();
-
-                        jsonFile = candidates.FirstOrDefault(p => p.EndsWith("_results.json", StringComparison.OrdinalIgnoreCase));
-                        txtFile = candidates.FirstOrDefault(p => p.EndsWith("_formatted.txt", StringComparison.OrdinalIgnoreCase));
-                    }
+                    var res = await HandleAnalysisResultAsync(contentUnderstandingService, result, logger, fileName, exporter);
+                    operationId = res.operationId;
+                    jsonFile = res.jsonPath;
+                    txtFile = res.textPath;
 
                     success++;
                 }
@@ -1003,9 +868,12 @@ public class Program
                 }
             }
 
-            await ExportBatchSummaryAsync(directoryName, classifierName, summary, logger);
-
-            logger.LogInformation("✅ Completed: {Success} succeeded, {Failed} failed", success, failed);
+            var summaryWriter = serviceProvider.GetRequiredService<BatchSummaryWriter>();
+            var summaryPath = await summaryWriter.ExportAsync(directoryName, classifierName, summary);
+            if (!string.IsNullOrEmpty(summaryPath))
+            {
+                logger.LogInformation("📦 Summary exported: {Path}", Path.GetFileName(summaryPath));
+            }
         }
         catch (Exception ex)
         {
@@ -1013,47 +881,7 @@ public class Program
         }
     }
 
-    private record BatchSummaryRow
-    {
-        public string File { get; init; } = string.Empty;
-        public string Status { get; init; } = string.Empty;
-        public string? OperationId { get; init; }
-        public string? JsonPath { get; init; }
-        public string? TextPath { get; init; }
-        public long DurationMs { get; init; }
-        public string? Error { get; init; }
-    }
-
-    private static async Task ExportBatchSummaryAsync(string directoryName, string classifierName, List<BatchSummaryRow> rows, ILogger logger)
-    {
-        try
-        {
-            var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Output");
-            Directory.CreateDirectory(outputDir);
-
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var baseName = $"batch_{SanitizeFilePart(directoryName)}_{SanitizeFilePart(classifierName)}_{timestamp}";
-
-            // JSON summary
-            var jsonPath = Path.Combine(outputDir, baseName + "_summary.json");
-            var json = JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(jsonPath, json);
-
-            logger.LogInformation("📦 Summary exported:");
-            logger.LogInformation("   📄 JSON: {Path}", Path.GetFileName(jsonPath));
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning("⚠️ Failed to export batch summary: {Message}", ex.Message);
-        }
-    }
-
-    private static string SanitizeFilePart(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
-        return new string(chars);
-    }
+    // Batch summary moved to Services.BatchSummaryWriter and Models.BatchSummaryRow
 
     /// <summary>
     /// Displays help information about available commands and usage
@@ -1063,46 +891,42 @@ public class Program
         logger.LogInformation("Azure Content Understanding C# Sample Application");
         logger.LogInformation("==================================================");
         logger.LogInformation("");
-        logger.LogInformation("USAGE:");
-        logger.LogInformation("  dotnet run [-- --mode <mode>] [options]");
-        logger.LogInformation("");
-        logger.LogInformation("MODES:");
-        logger.LogInformation("  help, --help, -h       Show this help information");
-        logger.LogInformation("  health, healthcheck     Run comprehensive health check of Azure resources");
-        logger.LogInformation("  analyzers, list         List all available analyzers in the service");
-        logger.LogInformation("  create-analyzer, create Create analyzer from JSON schema files");
-        logger.LogInformation("  test-analysis, analyze  Analyze documents with specified analyzer");
-        logger.LogInformation("  check-operation         Check the status of a specific operation");
-        logger.LogInformation("  classifiers             List all classifiers");
-        logger.LogInformation("  create-classifier       Create classifier from JSON schema");
-        logger.LogInformation("  classify                Classify a document with a classifier");
-        logger.LogInformation("  classify-dir            Classify all files in a Data/SampleDocuments subfolder");
-        logger.LogInformation("  interactive            Interactive mode with menu (default)");
-        logger.LogInformation("");
+    logger.LogInformation("USAGE:");
+    logger.LogInformation("  dotnet run -- --use-cli <command> [options]");
+    logger.LogInformation("");
+    logger.LogInformation("COMMANDS (preferred):");
+    logger.LogInformation("  health                    Run comprehensive health check");
+    logger.LogInformation("  analyzers                 List all analyzers");
+    logger.LogInformation("  analyze                   Analyze a document");
+    logger.LogInformation("  check-operation           Check operation status");
+    logger.LogInformation("  classifiers               List classifiers");
+    logger.LogInformation("  create-classifier         Create classifier from JSON");
+    logger.LogInformation("  create-analyzer           Create analyzer from JSON");
+    logger.LogInformation("  classify                  Classify a document");
+    logger.LogInformation("  classify-dir              Classify all files in a directory");
+    logger.LogInformation("");
         logger.LogInformation("OPTIONS:");
         logger.LogInformation("  --analyzer-file <file>  Specify analyzer JSON file for create-analyzer mode");
         logger.LogInformation("                         (looks in Data folder, supports partial names)");
         logger.LogInformation("  --analyzer <name>      Specify analyzer name for analysis mode");
-        logger.LogInformation("  --document <file>      Specify document file for analysis or classification");
-        logger.LogInformation("                         (looks in Data/SampleDocuments or absolute path)");
-        logger.LogInformation("  --operation-id <id>    Specify operation ID for check-operation mode");
+    logger.LogInformation("  --document <file>      Specify document file for analysis or classification");
+    logger.LogInformation("                         (looks in Data/SampleDocuments or absolute path)");
         logger.LogInformation("  --classifier <name>    Specify classifier name for classification");
         logger.LogInformation("  --classifier-file <f>  Specify classifier JSON file for create-classifier");
         logger.LogInformation("  --directory <subdir>   Directory under Data/SampleDocuments for classify-dir");
     // --text removed: only document classification supported
         logger.LogInformation("");
-        logger.LogInformation("EXAMPLES:");
-        logger.LogInformation("  dotnet run                                          # Interactive mode");
-        logger.LogInformation("  dotnet run -- --mode health                         # Health check only");
-        logger.LogInformation("  dotnet run -- --mode analyzers                      # List analyzers");
-        logger.LogInformation("  dotnet run -- --mode create-analyzer --analyzer-file receipt.json --analyzer receipt");
-        logger.LogInformation("  dotnet run -- --mode analyze --analyzer receipt --document receipt1.pdf");
-        logger.LogInformation("  dotnet run -- --mode check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
-        logger.LogInformation("  dotnet run -- --mode classifiers                    # List classifiers");
-        logger.LogInformation("  dotnet run -- --mode create-classifier --classifier-file product-categories.json --classifier products");
-        logger.LogInformation("  dotnet run -- --mode classify --classifier products --document sample.png");
-        logger.LogInformation("  dotnet run -- --mode classify-dir --classifier products --directory receipts");
-        logger.LogInformation("");
+    logger.LogInformation("EXAMPLES:");
+    logger.LogInformation("  dotnet run                                          # Interactive mode");
+    logger.LogInformation("  dotnet run -- --use-cli health                      # Health check only");
+    logger.LogInformation("  dotnet run -- --use-cli analyzers                   # List analyzers");
+    logger.LogInformation("  dotnet run -- --use-cli create-analyzer --analyzer-file receipt.json --analyzer receipt");
+    logger.LogInformation("  dotnet run -- --use-cli analyze --analyzer receipt --document receipt1.pdf");
+    logger.LogInformation("  dotnet run -- --use-cli check-operation --operation-id 069e39de-5132-425d-87b7-9f84cd4317f5");
+    logger.LogInformation("  dotnet run -- --use-cli classifiers                 # List classifiers");
+    logger.LogInformation("  dotnet run -- --use-cli create-classifier --classifier-file product-categories.json --classifier products");
+    logger.LogInformation("  dotnet run -- --use-cli classify --classifier products --document sample.png");
+    logger.LogInformation("  dotnet run -- --use-cli classify-dir --classifier products --directory receipts");
         logger.LogInformation("FEATURES:");
         logger.LogInformation("  ✅ Complete Azure Content Understanding API integration");
         logger.LogInformation("  ✅ Health checks for all Azure resources");
@@ -1121,125 +945,13 @@ public class Program
         logger.LogInformation("For more information, run in interactive mode or check the documentation.");
     }
 
-    /// <summary>
-    /// Exports analysis results to JSON and formatted text files in the Output directory
-    /// </summary>
-    private static async Task ExportAnalysisResultsAsync(string resultResponse, string operationId, string documentName, ILogger logger)
+    // Export and formatting moved to Services.ResultExporter
+
+    private static string? CleanOperationId(string? operationId)
     {
-        try
-        {
-            // Create Output directory if it doesn't exist
-            var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Output");
-            Directory.CreateDirectory(outputDir);
-
-            // Generate timestamp for unique filenames
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var safeDocumentName = Path.GetFileNameWithoutExtension(documentName);
-            
-            // Extract just the operation ID part (before any query parameters or additional info)
-            var cleanOperationId = operationId.Split('?')[0]; // Remove query parameters first
-            var safeOperationId = cleanOperationId.Contains('_') 
-                ? cleanOperationId.Split('_')[0] 
-                : cleanOperationId;
-
-            // Raw JSON results file
-            var jsonFileName = $"{safeDocumentName}_{safeOperationId}_{timestamp}_results.json";
-            var jsonFilePath = Path.Combine(outputDir, jsonFileName);
-            
-            // Pretty-print the JSON
-            var jsonDocument = JsonDocument.Parse(resultResponse);
-            var prettyJson = JsonSerializer.Serialize(jsonDocument, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(jsonFilePath, prettyJson);
-
-            // Formatted text results file
-            var txtFileName = $"{safeDocumentName}_{safeOperationId}_{timestamp}_formatted.txt";
-            var txtFilePath = Path.Combine(outputDir, txtFileName);
-            
-            var formattedContent = await CreateFormattedResultsAsync(resultResponse, documentName, operationId);
-            await File.WriteAllTextAsync(txtFilePath, formattedContent);
-
-            logger.LogInformation("💾 Results exported to Output folder:");
-            logger.LogInformation("   📄 Raw JSON: {JsonFile}", jsonFileName);
-            logger.LogInformation("   📝 Formatted: {TxtFile}", txtFileName);
-            logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning("⚠️ Failed to export results to files: {Message}", ex.Message);
-            logger.LogDebug(ex, "Export exception details");
-        }
-    }
-
-    /// <summary>
-    /// Creates a human-readable formatted version of the analysis results
-    /// </summary>
-    private static Task<string> CreateFormattedResultsAsync(string resultResponse, string documentName, string operationId)
-    {
-        var content = new List<string>
-        {
-            "Azure Content Understanding - Analysis Results",
-            "=" + new string('=', 47),
-            "",
-            $"Document: {documentName}",
-            $"Operation ID: {operationId}",
-            $"Processed: {DateTime.Now:yyyy-MM-dd HH:mm:ss}",
-            "",
-            "EXTRACTED FIELDS:",
-            "-".PadRight(50, '-'),
-            ""
-        };
-
-        try
-        {
-            var analysisDoc = JsonDocument.Parse(resultResponse);
-            
-            // The structure is: result -> contents[0] -> fields
-            if (analysisDoc.RootElement.TryGetProperty("result", out var result) &&
-                result.TryGetProperty("contents", out var contents) &&
-                contents.GetArrayLength() > 0)
-            {
-                var firstContent = contents[0];
-                if (firstContent.TryGetProperty("fields", out var fields))
-                {
-                    foreach (var field in fields.EnumerateObject())
-                    {
-                        var fieldValue = ExtractFieldValue(field.Value);
-                        content.Add($"• {field.Name}:");
-                        content.Add($"  {fieldValue}");
-                        content.Add("");
-                    }
-                }
-                else
-                {
-                    content.Add("No specific fields were extracted from this document.");
-                    content.Add("This might be normal depending on the analyzer schema.");
-                }
-            }
-            else
-            {
-                content.Add("No analysis results found in the response.");
-            }
-        }
-        catch (Exception ex)
-        {
-            content.Add($"Error parsing results: {ex.Message}");
-        }
-
-        content.Add("");
-        content.Add("RAW JSON RESPONSE:");
-        content.Add("-".PadRight(50, '-'));
-        
-        try
-        {
-            var jsonDocument = JsonDocument.Parse(resultResponse);
-            var prettyJson = JsonSerializer.Serialize(jsonDocument, new JsonSerializerOptions { WriteIndented = true });
-            content.Add(prettyJson);
-        }
-        catch
-        {
-            content.Add(resultResponse);
-        }
-
-        return Task.FromResult(string.Join(Environment.NewLine, content));
+        if (string.IsNullOrWhiteSpace(operationId)) return operationId;
+        var clean = operationId.Split('?')[0];
+        if (clean.Contains('_')) clean = clean.Split('_')[0];
+        return clean;
     }
 }

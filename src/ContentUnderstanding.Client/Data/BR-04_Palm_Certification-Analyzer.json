@@ -1,0 +1,21 @@
+{
+  "description": "Analyzer for BR-04 Palm Certification Compliance",
+  "baseAnalyzerId": "prebuilt-documentAnalyzer",
+  "config": {
+    "returnDetails": true,
+    "enableFormula": false,
+    "disableContentFiltering": false,
+    "estimateFieldSourceAndConfidence": true,
+    "tableFormat": "html"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Supplier": { "type": "string", "method": "extract", "description": "Supplier/company issuing the palm compliance declaration (header/signature block)." },
+      "MaterialName": { "type": "string", "method": "extract", "description": "Material or product name covered by the declaration." },
+      "MaterialCode": { "type": "string", "method": "extract", "description": "Supplier/internal identifier for the material, if present." },
+      "IssueDate": { "type": "string", "method": "extract", "description": "Date of the certificate/declaration issue." },
+      "ContainsPalmDerived": { "type": "boolean", "method": "extract", "description": "True if the document states that the material contains palm/palm kernel-derived substances; False if it explicitly states none or 'Not Applicable'." },
+      "RSPOCategory": { "type": "string", "method": "extract", "description": "Declared RSPO supply chain category for palm inputs where applicable (e.g., 'Identity Preserved', 'Segregated', 'Mass Balance', or 'Not Applicable'). Use the exact term printed." }
+    }
+  }
+}
