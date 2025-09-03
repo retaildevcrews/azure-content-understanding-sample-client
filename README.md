@@ -1,6 +1,6 @@
  # Azure Content Understanding C# Client Sample
 
-A focused .NET 8 sample application demonstrating Azure Content Understanding capabilities with quick-start guidance and examples.
+A focused .NET 8 sample application demonstrating Azure Content Understanding capabilities with quick-start guidance and examples. Draws heavily from other samples available, like https://github.com/Azure-Samples/data-extraction-using-azure-content-understanding/ and https://github.com/Azure-Samples/azure-ai-content-understanding-dotnet. 
 
 ## Features
 
