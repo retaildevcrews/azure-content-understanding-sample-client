@@ -27,7 +27,7 @@
           }
         }
       },
-      "FragranceAllergens": { "type": "array", "method": "extract", "description": "Any listed fragrance allergens as per Annex disclosure (if present). Use the allergen names exactly as printed.", "items": { "type": "string" } }
+      "FragranceAllergens": { "type": "string", "method": "extract", "description": "Any listed fragrance allergens as per Annex disclosure (if present). Use the allergen names exactly as printed.", "items": { "type": "string" } }
     }
   }
 }

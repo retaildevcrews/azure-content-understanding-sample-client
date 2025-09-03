@@ -16,7 +16,8 @@
       "IssueDate": { "type": "string", "method": "extract", "description": "SDS issue/publication date." },
       "Revision": { "type": "string", "method": "extract", "description": "SDS revision number or date string if provided." },
       "GHSClassification": { "type": "string", "method": "extract", "description": "Overall GHS/CLP classification summary from Section 2 (e.g., 'Not classified as hazardous')." },
-      "HazardStatements": { "type": "array", "method": "extract", "description": "List of H-statements or hazard phrases from Section 2, if any (e.g., H315).", "items": { "type": "string" } },
+      "HazardStatements": { "type": "string", "method": "extract", "description": "List of H-statements or hazard phrases from Section 2, if any (e.g., H315).", "items": { "type": "string" } },
+      "WaterActivity": { "type": "number", "method": "extract", "description": "Water activity (aw) value if provided in Section 9 or elsewhere. Numeric value only." },
       "INCIComposition": {
         "type": "array",
         "method": "extract",
@@ -27,18 +28,6 @@
             "INCI": { "type": "string", "method": "extract", "description": "INCI name of the ingredient as listed in Section 3." },
             "Percent": { "type": "number", "method": "extract", "description": "Percentage by weight for the ingredient. Remove '%' and use '.' as decimal." }
           }
-        }
-      },
-      "PhysicalProperties": {
-        "type": "object",
-        "properties": {
-          "Appearance": { "type": "string", "method": "extract", "description": "Appearance/physical state from Section 9 (e.g., 'Clear to pale yellow, oily liquid')." },
-          "Odor": { "type": "string", "method": "extract", "description": "Odor description from Section 9." },
-          "FlashPointC": { "type": "number", "method": "extract", "description": "Flash point in °C from Section 9/Section 10. Parse numeric value only." },
-          "Density_g_per_mL": { "type": "number", "method": "extract", "description": "Density (25 C) in g/mL from Section 9. Convert if unit printed is equivalent (e.g., 0.90 g/mL)." },
-          "RefractiveIndex": { "type": "number", "method": "extract", "description": "Refractive index at specified temperature (e.g., 25 C). Store numeric value (e.g., 1.478)." },
-          "Viscosity_mPa_s": { "type": "number", "method": "extract", "description": "Viscosity in mPa·s at stated temperature from Section 9. Extract numeric part (e.g., 180)." },
-          "WaterActivity": { "type": "number", "method": "extract", "description": "Water activity (aw) value if provided in Section 9 or elsewhere. Numeric value only." }
         }
       }
     }

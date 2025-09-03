@@ -1,5 +1,5 @@
 {
-  "description": "Analyzer for BR-07 Processing Temperature",
+  "description": "Analyzer for BR-07 Processing Temperature, found in Micro Testing",
   "baseAnalyzerId": "prebuilt-documentAnalyzer",
   "config": {
     "returnDetails": true,
@@ -17,7 +17,8 @@
       "MaxRecommendedProcessingTempC": { "type": "number", "method": "extract", "description": "Maximum recommended processing temperature in °C. Parse numeric value; strip the 'C' symbol." },
       "ShortTermToleranceTempC": { "type": "number", "method": "extract", "description": "Short-term exposure tolerance temperature in °C (higher threshold allowed briefly)." },
       "ShortTermToleranceDuration": { "type": "string", "method": "extract", "description": "Permitted duration for short-term exposure (e.g., '<= 60 minutes'). Preserve comparator symbols." },
-      "RecommendedAdditionTempC": { "type": "number", "method": "extract", "description": "Recommended addition temperature (°C) in process context (e.g., during emulsion cool-down)." }
+      "RecommendedAdditionTempC": { "type": "number", "method": "extract", "description": "Recommended addition temperature (°C) in process context (e.g., during emulsion cool-down)." },
+      "WaterActivity": { "type": "number", "method": "extract", "description": "Water activity (aw) numeric value. Strip labels like 'aw' and capture the decimal number (e.g., 0.420)." }
     }
   }
 }

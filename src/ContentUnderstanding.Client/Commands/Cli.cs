@@ -67,12 +67,14 @@ internal static class Cli
     var classifierNameOption = new Option<string>(name: "--classifier", description: "Classifier name", getDefaultValue: () => string.Empty);
     var classifierFileOption = new Option<string>(name: "--classifier-file", description: "Classifier JSON file", getDefaultValue: () => string.Empty);
     var createClf = new Command("create-classifier", "Create classifier from JSON");
+    var overwriteOption = new Option<bool>(name: "--overwrite", description: "If the classifier exists (409), delete and recreate", getDefaultValue: () => false);
     createClf.AddOption(classifierNameOption);
     createClf.AddOption(classifierFileOption);
-    createClf.SetHandler(async (string classifier, string file) =>
+    createClf.AddOption(overwriteOption);
+    createClf.SetHandler(async (string classifier, string file, bool overwrite) =>
         {
-            await Program.RunCreateClassifierAsync(services, classifier, file);
-    }, classifierNameOption, classifierFileOption);
+            await Program.RunCreateClassifierAsync(services, classifier, file, overwrite);
+    }, classifierNameOption, classifierFileOption, overwriteOption);
         root.Add(createClf);
 
         // classify

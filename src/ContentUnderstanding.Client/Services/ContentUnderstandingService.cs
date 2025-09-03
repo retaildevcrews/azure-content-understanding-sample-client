@@ -627,6 +627,43 @@ public class ContentUnderstandingService
     }
 
     /// <summary>
+    /// Deletes a classifier if it exists
+    /// </summary>
+    public async Task DeleteClassifierAsync(string classifierName)
+    {
+        if (string.IsNullOrEmpty(classifierName))
+            throw new ArgumentException("Classifier name cannot be null or empty", nameof(classifierName));
+
+        _logger.LogInformation("🗑️ Deleting classifier: {ClassifierName}", classifierName);
+        try
+        {
+            await ConfigureAuthenticationAsync();
+            var url = BuildApiUrl($"{CLASSIFIERS_PATH}/{Uri.EscapeDataString(classifierName)}");
+            _logger.LogDebug("DELETE {Url}", url);
+            var response = await _httpClient.DeleteAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("✅ Successfully deleted classifier: {ClassifierName}", classifierName);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("⚠️ Classifier not found (already deleted?): {ClassifierName}", classifierName);
+            }
+            else
+            {
+                var text = await response.Content.ReadAsStringAsync();
+                _logger.LogError("❌ Failed to delete classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, text);
+                throw new HttpRequestException($"Failed to delete classifier '{classifierName}': {response.StatusCode} - {text}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting classifier: {ClassifierName}", classifierName);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Creates or updates a classifier definition (JSON schema)
     /// </summary>
     public async Task<string> CreateOrUpdateClassifierAsync(string classifierName, string schemaJson)
@@ -649,12 +686,43 @@ public class ContentUnderstandingService
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("✅ Successfully created/updated classifier: {ClassifierName}", classifierName);
+
+                // Extract Operation ID from headers only (confirmed source)
+                try
+                {
+                    string? opLocation = response.Headers.Location?.ToString()
+                        ?? (response.Headers.Contains("Operation-Location")
+                            ? response.Headers.GetValues("Operation-Location").FirstOrDefault()
+                            : null);
+                    if (!string.IsNullOrWhiteSpace(opLocation))
+                    {
+                        var tail = opLocation.Split('/').LastOrDefault();
+                        var opId = CleanOperationId(tail);
+                        if (!string.IsNullOrWhiteSpace(opId))
+                        {
+                            _logger.LogInformation("🆔 Operation ID (header) for create/update classifier: {OperationId}", opId);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("ℹ️ Operation-Location header present but could not parse Operation ID");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("ℹ️ No Operation-Location/Location header found for classifier create/update");
+                    }
+                }
+                catch
+                {
+                    // Ignore extraction issues; operation ID may not be applicable for this API
+                }
+
                 return responseText;
             }
             else
             {
                 _logger.LogError("❌ Failed to create/update classifier {ClassifierName}. Status: {StatusCode}, Response: {Response}", classifierName, response.StatusCode, responseText);
-                throw new HttpRequestException($"Failed to create/update classifier '{classifierName}': {response.StatusCode} - {responseText}");
+                throw new HttpRequestException($"Failed to create/update classifier '{classifierName}': {response.StatusCode} - {responseText}", null, response.StatusCode);
             }
         }
         catch (Exception ex)
@@ -744,5 +812,16 @@ public class ContentUnderstandingService
 
         property = default;
         return false;
+    }
+
+    /// <summary>
+    /// Normalizes an operation ID by removing any query strings and trailing segments after underscores.
+    /// </summary>
+    private static string? CleanOperationId(string? operationId)
+    {
+        if (string.IsNullOrWhiteSpace(operationId)) return operationId;
+        var clean = operationId.Split('?')[0];
+        if (clean.Contains('_')) clean = clean.Split('_')[0];
+        return clean;
     }
 }

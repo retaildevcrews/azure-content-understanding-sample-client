@@ -1,6 +1,5 @@
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
-using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -50,7 +49,6 @@ public class HealthCheckService
         {
             CheckContentUnderstandingServiceAsync(),
             CheckKeyVaultAccessAsync(),
-            CheckStorageAccountAccessAsync(),
             CheckManagedIdentityAsync()
         };
 
@@ -281,86 +279,8 @@ public class HealthCheckService
         return check;
     }
 
-    /// <summary>
-    /// Checks Storage Account accessibility using managed identity authentication
-    /// </summary>
-    private async Task<ServiceHealthCheck> CheckStorageAccountAccessAsync()
-    {
-        _logger.LogInformation("💾 Checking Azure Storage Account access...");
-        
-        var check = new ServiceHealthCheck
-        {
-            ServiceName = "Azure Storage Account",
-            Status = "Unknown"
-        };
-
-        try
-        {
-            // Get storage account name from configuration
-            var storageAccountName = _configuration["AzureStorage:AccountName"];
-            if (string.IsNullOrEmpty(storageAccountName))
-            {
-                check.Status = "Failed";
-                check.Message = "Storage account name not configured";
-                check.Details = "Configure AzureStorage:AccountName in appsettings.json";
-                return check;
-            }
-
-            // Create BlobServiceClient using managed identity
-            var storageUri = new Uri($"https://{storageAccountName}.blob.core.windows.net/");
-            var blobServiceClient = new BlobServiceClient(storageUri, _credential);
-
-            var containerName = _configuration["AzureStorage:ContainerName"] ?? "samples";
-            
-            // Test container access using managed identity
-            var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var containerExists = await containerClient.ExistsAsync(cancellationToken: cts.Token);
-
-            if (containerExists.Value)
-            {
-                // Try to list blobs in container
-                var blobPages = containerClient.GetBlobsAsync();
-                var blobCount = 0;
-                
-                await foreach (var blobItem in blobPages)
-                {
-                    blobCount++;
-                    if (blobCount >= 5) break; // Limit for health check
-                }
-
-                check.Status = "Healthy";
-                check.Message = "Storage account and container are accessible using managed identity";
-                check.Details = $"Account: {blobServiceClient.AccountName}, Container: {containerName}, Blobs: {blobCount}";
-            }
-            else
-            {
-                check.Status = "Warning";
-                check.Message = "Storage account accessible but container not found";
-                check.Details = $"Account: {blobServiceClient.AccountName}, Missing container: {containerName}";
-            }
-        }
-        catch (Azure.Identity.AuthenticationFailedException ex)
-        {
-            check.Status = "Failed";
-            check.Message = "Authentication failed for Key Vault access";
-            check.Details = ex.Message;
-        }
-        catch (Azure.RequestFailedException ex)
-        {
-            check.Status = "Failed";
-            check.Message = $"Storage Account request failed: {ex.Status}";
-            check.Details = ex.Message;
-        }
-        catch (Exception ex)
-        {
-            check.Status = "Failed";
-            check.Message = "Unexpected error checking Storage Account";
-            check.Details = ex.Message;
-        }
-
-        return check;
-    }
+    // Storage Account health check intentionally removed: app does not directly access Storage and
+    // it is commonly locked down with public network disabled. Keeping the health surface minimal.
 
     /// <summary>
     /// Checks managed identity authentication and token retrieval
@@ -381,8 +301,7 @@ public class HealthCheckService
             var scopes = new[]
             {
                 "https://cognitiveservices.azure.com/.default",
-                "https://vault.azure.net/.default",
-                "https://storage.azure.com/.default"
+                "https://vault.azure.net/.default"
             };
 
             var successfulScopes = new List<string>();

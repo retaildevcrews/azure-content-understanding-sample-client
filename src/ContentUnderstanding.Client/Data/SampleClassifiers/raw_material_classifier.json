@@ -1,0 +1,65 @@
+{
+  "description": "Classify documents related to raw material specifications to determine the correct analyzer",
+  "tags": {
+    "createdBy": "AdminUser"
+  },
+  "splitMode": "noSplit",
+  "categories": {
+    "rm_composition": {
+      "description": "Classify documents containing the raw material chemical composition. This would not contain specification test results, but a percentage breakdown of the raw material only.",
+      "analyzerId": "rm_composition"
+    },
+    "rm_specification": {
+      "description": "Classify documents containing a list of specification tests for a raw material, including test names, results, units of measure, and similar measurements. Other names for the document include Certificate of Analysis or CoA.",
+      "analyzerId": "rm_specification"
+    },
+    "rm_leapingbunny": {
+      "description": "Classify documents describing Leaping Bunny compliance or cruelty-free status.",
+      "analyzerId": "rm_leapingbunny"
+    },
+    "rm_palmcert": {
+      "description": "Classify documents named Palm Certificate or Palm status and describing whether the raw material is sourced from palm.",
+      "analyzerId": "rm_palmcert"
+    },
+    "rm_sourcing": {
+      "description": "Classify documents named Sourcing and containing the certification regarding sources of raw material, including list of Petroleum, Plant, Mineral, Animal, and Microorganism components.",
+      "analyzerId": "rm_sourcing"
+    },
+    "rm_water": {
+      "description": "Classify documents describing Water Activity or Water content, potentially also containing processing temperature results.",
+      "analyzerId": "rm_water"
+    },
+    "rm_microtesting": {
+      "description": "Classify documents describing Micro Testing and results containing processing temperature and/or water activity.",
+      "analyzerId": "rm_microtesting"
+    },
+    "rm_heavymetal": {
+      "description": "Classify documents describing Heavy Metal Testing.",
+      "analyzerId": "rm_heavymetal"
+    },
+    "rm_impurity": {
+      "description": "Classify documents describing Impurity profile.",
+      "analyzerId": "rm_impurity"
+    },
+    "rm_sds": {
+      "description": "Classify documents named Safety Data Sheet.",
+      "analyzerId": "rm_sds"
+    },
+    "rm_annex14": {
+      "description": "Classify documents describing CSAR Annex 14 compliance.",
+      "analyzerId": "rm_annex14"
+    },
+    "rm_reach": {
+      "description": "Classify documents describing REACH compliance.",
+      "analyzerId": "rm_reach"
+    },
+    "rm_jsqi": {
+      "description": "Classify documents describing JSQI compliance.",
+      "analyzerId": "rm_jsqi"
+    },
+    "rm_manufprocess": {
+      "description": "Classify documents describing manufacturing process flows.",
+      "analyzerId": "rm_manufprocess"
+    }
+  }
+}

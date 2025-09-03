@@ -16,7 +16,7 @@
       "SOP": { "type": "string", "method": "extract", "description": "SOP or procedure identifier referenced by the process (e.g., 'MFG-VE-002')." },
       "Revision": { "type": "string", "method": "extract", "description": "SOP or document revision string/number (e.g., '1.0')." },
       "EffectiveDate": { "type": "string", "method": "extract", "description": "Effective date of the SOP or process document." },
-      "FlowSteps": { "type": "array", "method": "extract", "description": "Ordered list of the numbered manufacturing steps as printed in the document. Keep original order and step text.", "items": { "type": "string" } },
+      "FlowSteps": { "type": "string", "method": "extract", "description": "Ordered list of the numbered manufacturing steps as printed in the document. Keep original order and step text.", "items": { "type": "string" } },
       "Notes": { "type": "string", "method": "extract", "description": "Any general notes, cautions, or process constraints (e.g., temperature limits, protect from light/oxygen)." }
     }
   }

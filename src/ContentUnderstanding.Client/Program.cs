@@ -650,7 +650,7 @@ public class Program
     }
 
     // NEW: Create classifier from JSON
-    internal static async Task RunCreateClassifierAsync(IServiceProvider serviceProvider, string classifierName, string classifierFile)
+    internal static async Task RunCreateClassifierAsync(IServiceProvider serviceProvider, string classifierName, string classifierFile, bool overwrite = false)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -683,10 +683,34 @@ public class Program
             logger.LogInformation("✅ JSON validation passed");
             logger.LogInformation("🚀 Creating classifier: {ClassifierName}", classifierName);
 
-            var result = await contentUnderstandingService.CreateOrUpdateClassifierAsync(classifierName, jsonContent);
+            try
+            {
+                var result = await contentUnderstandingService.CreateOrUpdateClassifierAsync(classifierName, jsonContent);
+                logger.LogInformation("✅ Successfully created classifier: {ClassifierName}", classifierName);
+                logger.LogDebug("API Response: {Result}", result);
+            }
+            catch (HttpRequestException httpEx) when ((httpEx.StatusCode.HasValue && httpEx.StatusCode == System.Net.HttpStatusCode.Conflict) || httpEx.Message.Contains("Conflict") || httpEx.Message.Contains("409"))
+            {
+                if (!overwrite)
+                {
+                    logger.LogError("❌ Classifier already exists (409 Conflict). Re-run with --overwrite to delete and recreate.");
+                    return;
+                }
 
-            logger.LogInformation("✅ Successfully created classifier: {ClassifierName}", classifierName);
-            logger.LogDebug("API Response: {Result}", result);
+                logger.LogWarning("⚠️ Classifier exists. --overwrite is set, deleting then recreating: {ClassifierName}", classifierName);
+                try
+                {
+                    await contentUnderstandingService.DeleteClassifierAsync(classifierName);
+                }
+                catch (Exception delEx)
+                {
+                    logger.LogWarning(delEx, "⚠️ Failed to delete existing classifier '{ClassifierName}' before recreate; will still attempt recreate", classifierName);
+                }
+
+                var recreate = await contentUnderstandingService.CreateOrUpdateClassifierAsync(classifierName, jsonContent);
+                logger.LogInformation("✅ Successfully recreated classifier: {ClassifierName}", classifierName);
+                logger.LogDebug("API Response: {Result}", recreate);
+            }
         }
         catch (FileNotFoundException ex)
         {

@@ -17,6 +17,9 @@ dotnet run -- --use-cli analyze --document my-invoice.pdf
 
 # Check specific operation status
 dotnet run -- --use-cli check-operation --operation-id your-operation-id-here
+ 
+# Create a classifier from JSON (add --overwrite to replace if it exists)
+dotnet run -- --use-cli create-classifier --classifier <name> --classifier-file <file> [--overwrite]
 ```
 
 ## 📋 Common CLI Patterns
@@ -28,6 +31,19 @@ dotnet run -- --use-cli analyzers
 
 # Create analyzer from schema file
 dotnet run -- --use-cli create-analyzer --analyzer receipt --analyzer-file receipt.json
+```
+
+### Classifier Management
+```bash
+# List classifiers
+dotnet run -- --use-cli classifiers
+
+# Create a classifier from a schema file
+dotnet run -- --use-cli create-classifier --classifier <name> --classifier-file <file>
+
+# Overwrite behavior: if a classifier with the same name exists, the API returns 409 Conflict.
+# Use --overwrite to delete the existing classifier and recreate it automatically.
+dotnet run -- --use-cli create-classifier --classifier <name> --classifier-file <file> --overwrite
 ```
 
 ### Document Analysis

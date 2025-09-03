@@ -42,6 +42,21 @@
           }
         }
       },
+      "Components": {
+        "type": "array",
+        "method": "extract",
+        "description": "List/table of components by INCI with Typical %, Min %, Max %, and notes. One entry per row in the composition table.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "INCIName": { "type": "string", "method": "extract", "description": "INCI name of the component as listed in the table (use PCPC taxonomy wording if present)." },
+            "TypicalPercent": { "type": "number", "method": "extract", "description": "Typical % w/w value for the component. Parse up to 6 decimals; remove '%' and thousand separators." },
+            "MinPercent": { "type": "number", "method": "extract", "description": "Minimum % w/w if provided. If blank or 'N/A', leave empty." },
+            "MaxPercent": { "type": "number", "method": "extract", "description": "Maximum % w/w if provided. If blank or 'N/A', leave empty." },
+            "Notes": { "type": "string", "method": "extract", "description": "Any notes in the row (e.g., source details like 'Plant-derived (Sunflower)', assay remarks)." }
+          }
+        }
+      },
       "Notes": { "type": "string", "method": "extract", "description": "Free-text notes or remarks sections (e.g., storage, sampling, shelf life). Concatenate if multiple note blocks exist." }
     }
   }

@@ -1,19 +1,18 @@
- # Azure Content Understanding C# Sample Application
+ # Azure Content Understanding C# Client Sample
 
 A focused .NET 8 sample application demonstrating Azure Content Understanding capabilities with quick-start guidance and examples.
 
-## 🚀 Features
+## Features
 
-- ✅ **Azure Content Understanding API integration** with authentication and configurable endpoints
-- ✅ **Centralized polling** with 20-minute timeout (5s interval)
-- ✅ **Improved JSON result parsing** with proper field extraction and error handling
-- ✅ **Health checks for key Azure resources** (Content Understanding, Key Vault, Storage Account)
-- ✅ **JSON-based analyzer schema management** with automatic discovery and validation
-- ✅ **End-to-end document analysis pipeline** with real-time polling
-- ✅ **Rich result formatting** with confidence levels and structured data display
-- ✅ **Results export** to JSON and formatted text files with clean filename generation
-- ✅ **Parameterized CLI operations** with sensible defaults
-- ✅ **Multi-format document support** (PDF, PNG, JPG, JPEG, TIFF, BMP)
+- **Terraform based iac** deploy/provision all necessary Azure resources
+- **Azure Content Understanding API integration** with authentication and configurable endpoints
+- **Health checks for key Azure resources** (Content Understanding, Key Vault)
+- **Analyzer and Classifier samples** exploring several use cases
+- **End-to-end document analysis pipeline**
+  - Create/Upload Analayzers and Classifiers
+  - Run analysis of single documents
+  - Run classification and analysis on single/multiple documents
+- **Simple CLI operations** with local export of results
 
 ## 📋 Prerequisites
 
@@ -45,7 +44,7 @@ dotnet run -- --use-cli classifiers
 dotnet run -- --use-cli classify --classifier <name> --document <file>
 dotnet run -- --use-cli classify-dir --classifier <name> --directory <subfolder>
 ### Classify a whole directory
-
+```
 Classify all supported files in a subfolder under `Data/SampleDocuments` using a classifier:
 
 ```pwsh
@@ -58,12 +57,6 @@ dotnet run --project .\src\ContentUnderstanding.Client -- --use-cli classify-dir
 - Outputs: per-file JSON and formatted text results in `Output/` plus a mandatory batch summary:
 	- `batch_<directory>_<classifier>_<timestamp>_summary.json`
 
-Example:
-
-```pwsh
-dotnet run --project .\src\ContentUnderstanding.Client -- --use-cli classify-dir --classifier products --directory receipts
-```
-```
 
 ## 📖 Usage Guide
 
@@ -72,13 +65,10 @@ dotnet run --project .\src\ContentUnderstanding.Client -- --use-cli classify-dir
 Preferred: subcommands via System.CommandLine
 
 ```powershell
-# Interactive mode with guided menu (default)
-dotnet run
-
 # Show comprehensive help
-dotnet run -- --use-cli health
+dotnet run -- --use-cli
 
-# Health check all Azure resources
+# Health check core Azure resources (Content Understanding, Key Vault, Managed Identity)
 dotnet run -- --use-cli health
 
 # List all available analyzers
@@ -140,47 +130,6 @@ Common commands:
 - classify --classifier <name> --document <file>
 - classify-dir --classifier <name> --directory <subfolder>
 
-## Examples by Use Case
-
-**Quick Start:**
-```powershell
-# Interactive guided experience
-dotnet run
-
-# Show help
-dotnet run -- --use-cli health
-```
-
-**Health & Status:**
-```powershell
-# Check configured Azure resources and connectivity
-dotnet run -- --use-cli health
-
-# List available analyzers
-dotnet run -- --use-cli analyzers
-```
-
-**Create Analyzers:**
-```powershell
-# Create the default sample analyzer
-dotnet run -- --use-cli create-analyzer
-
-# Create from a specific analyzer JSON file (partial name allowed)
-dotnet run -- --use-cli create-analyzer --analyzer-file receipt
-```
-
-**Document Analysis:**
-```powershell
-# Analyze using defaults (uses sample document + default analyzer)
-dotnet run -- --use-cli analyze
-
-# Analyze a specific document file
-dotnet run -- --use-cli analyze --document receipt.png
-
-# Use a specific analyzer and document
-dotnet run -- --use-cli analyze --analyzer receipt --document receipt.png
-```
-
 ## Project layout
 
 ```
@@ -201,10 +150,6 @@ azure-ai-content-understanding-basic/
 
 The application uses `appsettings.json` for non-sensitive configuration and Azure Key Vault or environment variables for secrets. See `docs/CONFIGURATION.md` for details.
 
-## Document-only classification
-
-This sample and CLI support document/binary classification only. Inline text classification (previously available as a `--text` option) has been removed. Use `--document <file>` to submit a document (PDF or image) for analysis or classification.
-
 ## Authentication
 
 The application uses `DefaultAzureCredential` for authentication, supporting:
@@ -219,7 +164,7 @@ The application uses `DefaultAzureCredential` for authentication, supporting:
 - The application looks for the `ai-services-key` secret by default
 - No hardcoded credentials in source code
 
-Note: in some environments Key Vault access may be restricted by network rules. For local development you can set the API key via environment variables or `appsettings.Development.json` if preferred.
+**Note**: Key Vault access may be restricted by network rules. For local development you can set the API key via environment variables or `appsettings.Development.json` if preferred.
 
 ## Documentation
 
