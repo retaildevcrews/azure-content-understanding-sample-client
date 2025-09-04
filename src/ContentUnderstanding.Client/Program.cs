@@ -297,6 +297,17 @@ public class Program
             {
                 targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
                 documentFileName = documentFile;
+                if (!File.Exists(targetDocumentPath))
+                {
+                    // Search recursively for the file
+                    var found = Directory.EnumerateFiles(sampleDocumentsPath, documentFile, SearchOption.AllDirectories).FirstOrDefault();
+                    if (found != null)
+                    {
+                        targetDocumentPath = found;
+                        documentFileName = Path.GetFileName(found);
+                        logger.LogInformation("🔎 Found document in subdirectory: {Path}", targetDocumentPath);
+                    }
+                }
             }
 
             if (!File.Exists(targetDocumentPath))
@@ -761,6 +772,17 @@ public class Program
             {
                 targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
                 documentFileName = documentFile;
+                if (!File.Exists(targetDocumentPath))
+                {
+                    // Search recursively for the file
+                    var found = Directory.EnumerateFiles(sampleDocumentsPath, documentFile, SearchOption.AllDirectories).FirstOrDefault();
+                    if (found != null)
+                    {
+                        targetDocumentPath = found;
+                        documentFileName = Path.GetFileName(found);
+                        logger.LogInformation("Found document in subdirectory: {Path}", targetDocumentPath);
+                    }
+                }
             }
 
             if (!File.Exists(targetDocumentPath))
