@@ -455,7 +455,7 @@ public class Program
                     var export = await exporter.ExportAsync(resultDoc, outputDir, documentFileName, cleanedOperationId);
                     logger.LogInformation("💾 Results exported to Output folder:");
                     logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
-                    logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                    logger.LogInformation("   📝 Formatted (HTML): {TxtFile}", Path.GetFileName(export.formattedPath));
                     logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
                     return (cleanedOperationId, export.jsonPath, export.formattedPath);
                 }
@@ -472,7 +472,7 @@ public class Program
                     var export = await exporter.ExportAsync(resultDoc, outputDir, documentFileName, cleanedOperationId);
                     logger.LogInformation("💾 Results exported to Output folder:");
                     logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
-                    logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                    logger.LogInformation("   📝 Formatted (HTML): {TxtFile}", Path.GetFileName(export.formattedPath));
                     logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
                     return (cleanedOperationId, export.jsonPath, export.formattedPath);
                 }
@@ -577,7 +577,7 @@ public class Program
                             var export = await exporter.ExportAsync(exportDoc, outputDir, $"operation_{cleanedOperationId}", cleanedOperationId);
                             logger.LogInformation("💾 Results exported to Output folder:");
                             logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
-                            logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                            logger.LogInformation("   📝 Formatted (HTML): {TxtFile}", Path.GetFileName(export.formattedPath));
                             logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
                         }
                     }
@@ -594,7 +594,7 @@ public class Program
                             var export = await exporter.ExportAsync(exportDoc, outputDir, $"operation_{cleanedOperationId}", cleanedOperationId);
                             logger.LogInformation("💾 Results exported to Output folder:");
                             logger.LogInformation("   📄 Raw JSON: {JsonFile}", Path.GetFileName(export.jsonPath));
-                            logger.LogInformation("   📝 Formatted: {TxtFile}", Path.GetFileName(export.formattedPath));
+                            logger.LogInformation("   📝 Formatted (HTML): {TxtFile}", Path.GetFileName(export.formattedPath));
                             logger.LogInformation("   📁 Location: {OutputDir}", outputDir);
                         }
                     }
@@ -964,7 +964,7 @@ public class Program
         logger.LogInformation("OUTPUT:");
         logger.LogInformation("  Analysis/classification results are saved to the 'Output' folder:");
         logger.LogInformation("  • Raw JSON results: *_results.json");
-        logger.LogInformation("  • Formatted results: *_formatted.txt");
+    logger.LogInformation("  • Formatted results (HTML): *_formatted.html");
         logger.LogInformation("");
         logger.LogInformation("For more information, run in interactive mode or check the documentation.");
     }
