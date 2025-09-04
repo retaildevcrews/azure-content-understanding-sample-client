@@ -213,7 +213,7 @@ public class Program
         }
     }
 
-    internal static async Task RunCreateAnalyzerAsync(IServiceProvider serviceProvider, string analyzername, string analyzerFile)
+    internal static async Task RunCreateAnalyzerAsync(IServiceProvider serviceProvider, string analyzername, string analyzerFile, bool overwrite = false)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
         var contentUnderstandingService = serviceProvider.GetRequiredService<ContentUnderstandingService>();
@@ -245,10 +245,34 @@ public class Program
             logger.LogInformation("✅ JSON validation passed");
             logger.LogInformation("🚀 Creating analyzer: {AnalyzerName}", analyzername);
 
-            var result = await contentUnderstandingService.CreateOrUpdateAnalyzerAsync(analyzername, jsonContent);
+            try
+            {
+                var result = await contentUnderstandingService.CreateOrUpdateAnalyzerAsync(analyzername, jsonContent);
+                logger.LogInformation("✅ Successfully created analyzer: {AnalyzerName}", analyzername);
+                logger.LogDebug("API Response: {Result}", result);
+            }
+            catch (HttpRequestException httpEx) when ((httpEx.StatusCode.HasValue && httpEx.StatusCode == System.Net.HttpStatusCode.Conflict) || httpEx.Message.Contains("Conflict") || httpEx.Message.Contains("409"))
+            {
+                if (!overwrite)
+                {
+                    logger.LogError("❌ Analyzer already exists (409 Conflict). Re-run with --overwrite to delete and recreate.");
+                    return;
+                }
 
-            logger.LogInformation("✅ Successfully created analyzer: {AnalyzerName}", analyzername);
-            logger.LogDebug("API Response: {Result}", result);
+                logger.LogWarning("⚠️ Analyzer exists. --overwrite is set, deleting then recreating: {AnalyzerName}", analyzername);
+                try
+                {
+                    await contentUnderstandingService.DeleteAnalyzerAsync(analyzername);
+                }
+                catch (Exception delEx)
+                {
+                    logger.LogWarning(delEx, "⚠️ Failed to delete existing analyzer '{AnalyzerName}' before recreate; will still attempt recreate", analyzername);
+                }
+
+                var recreate = await contentUnderstandingService.CreateOrUpdateAnalyzerAsync(analyzername, jsonContent);
+                logger.LogInformation("✅ Successfully recreated analyzer: {AnalyzerName}", analyzername);
+                logger.LogDebug("API Response: {Result}", recreate);
+            }
         }
         catch (FileNotFoundException ex)
         {

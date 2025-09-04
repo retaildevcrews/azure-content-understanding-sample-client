@@ -46,7 +46,7 @@
       "analyzerId": "rm_sds"
     },
     "rm_annex14": {
-      "description": "Classify documents describing CSAR Annex 14 compliance.",
+      "description": "Classify documents describing CSAR Annex 14 compliance, also known as NMPA documents.",
       "analyzerId": "rm_annex14"
     },
     "rm_reach": {

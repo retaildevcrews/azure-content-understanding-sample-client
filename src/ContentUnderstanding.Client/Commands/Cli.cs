@@ -102,13 +102,15 @@ internal static class Cli
         // create-analyzer
         var analyzerNameOption = new Option<string>(name: "--analyzer", description: "Analyzer name", getDefaultValue: () => string.Empty);
         var analyzerFileOption = new Option<string>(name: "--analyzer-file", description: "Analyzer JSON file", getDefaultValue: () => string.Empty);
+        var analyzerOverwriteOption = new Option<bool>(name: "--overwrite", description: "If the analyzer exists (409), delete and recreate", getDefaultValue: () => false);
         var createAnalyzer = new Command("create-analyzer", "Create analyzer from JSON");
         createAnalyzer.AddOption(analyzerNameOption);
         createAnalyzer.AddOption(analyzerFileOption);
-        createAnalyzer.SetHandler(async (string analyzer, string file) =>
+        createAnalyzer.AddOption(analyzerOverwriteOption);
+        createAnalyzer.SetHandler(async (string analyzer, string file, bool overwrite) =>
         {
-            await Program.RunCreateAnalyzerAsync(services, analyzer, file);
-        }, analyzerNameOption, analyzerFileOption);
+            await Program.RunCreateAnalyzerAsync(services, analyzer, file, overwrite);
+        }, analyzerNameOption, analyzerFileOption, analyzerOverwriteOption);
         root.Add(createAnalyzer);
 
         return root;
