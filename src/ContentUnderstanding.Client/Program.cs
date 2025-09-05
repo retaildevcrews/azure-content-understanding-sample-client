@@ -307,7 +307,7 @@ public class Program
         try
         {
             var projectRoot = PathResolver.ProjectRoot();
-            var sampleDocumentsPath = PathResolver.SampleDocumentsDir();
+            var targetDocumentsPath = PathResolver.DataDir();
 
             string targetDocumentPath;
             string documentFileName;
@@ -319,12 +319,12 @@ public class Program
             }
             else
             {
-                targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
+                targetDocumentPath = Path.Combine(targetDocumentsPath, documentFile);
                 documentFileName = documentFile;
                 if (!File.Exists(targetDocumentPath))
                 {
                     // Search recursively for the file
-                    var found = Directory.EnumerateFiles(sampleDocumentsPath, documentFile, SearchOption.AllDirectories).FirstOrDefault();
+                    var found = Directory.EnumerateFiles(targetDocumentsPath, documentFile, SearchOption.AllDirectories).FirstOrDefault();
                     if (found != null)
                     {
                         targetDocumentPath = found;
@@ -372,8 +372,8 @@ public class Program
         try
         {
             var projectRoot = PathResolver.ProjectRoot();
-            var sampleDocumentsPath = PathResolver.SampleDocumentsDir();
-            var targetDocumentPath = Path.Combine(sampleDocumentsPath, "receipt1.pdf");
+            var targetDocumentDir = PathResolver.DataDir();
+            var targetDocumentPath = Path.Combine(targetDocumentDir, "receipt1.pdf");
             var documentFileName = "receipt1.pdf";
 
             if (!File.Exists(targetDocumentPath))
@@ -782,7 +782,7 @@ public class Program
             }
 
             var projectRoot = PathResolver.ProjectRoot();
-            var sampleDocumentsPath = PathResolver.SampleDocumentsDir();
+            var targetDocumentDir = PathResolver.DataDir();
 
             string targetDocumentPath;
             string documentFileName;
@@ -794,12 +794,12 @@ public class Program
             }
             else
             {
-                targetDocumentPath = Path.Combine(sampleDocumentsPath, documentFile);
+                targetDocumentPath = Path.Combine(targetDocumentDir, documentFile);
                 documentFileName = documentFile;
                 if (!File.Exists(targetDocumentPath))
                 {
                     // Search recursively for the file
-                    var found = Directory.EnumerateFiles(sampleDocumentsPath, documentFile, SearchOption.AllDirectories).FirstOrDefault();
+                    var found = Directory.EnumerateFiles(targetDocumentDir, documentFile, SearchOption.AllDirectories).FirstOrDefault();
                     if (found != null)
                     {
                         targetDocumentPath = found;
@@ -855,7 +855,7 @@ public class Program
             }
 
             var projectRoot = PathResolver.ProjectRoot();
-            var baseDir = PathResolver.SampleDocumentsDir();
+            var baseDir = PathResolver.DataDir();
             var targetDir = Path.Combine(baseDir, directoryName);
 
             if (!Directory.Exists(targetDir))
