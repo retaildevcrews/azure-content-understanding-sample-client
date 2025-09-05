@@ -4,39 +4,52 @@ namespace ContentUnderstanding.Client.Data;
 
 public static class SampleClassifiers
 {
-    /// Loads a classifier JSON definition from the Data folder (supports partial matches).
+    /// <summary>
+    /// Loads a classifier JSON definition via:
+    ///  1. Absolute path (if provided and exists)
+    ///  2. Relative path under Data/SampleClassifiers (if includes directory separators)
+    ///  3. Recursive exact filename search under Data/SampleClassifiers (case-insensitive)
+    /// No partial name matching is performed to avoid ambiguity.
+    /// </summary>
     public static async Task<string> LoadClassifierJsonAsync(string fileName)
     {
-        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        var dataDir = Path.Combine(baseDir, "Data\\SampleClassifiers");
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new ArgumentException("Classifier file name is required", nameof(fileName));
 
-        // If a direct path is provided and exists, use it
+    var dataDir = Path.Combine(ContentUnderstanding.Client.Utilities.PathResolver.DataDir(), "SampleClassifiers");
+
+        // Absolute path
         if (Path.IsPathFullyQualified(fileName) && File.Exists(fileName))
         {
             return await File.ReadAllTextAsync(fileName);
         }
 
-        // Try exact match in Data
-        var direct = Path.Combine(dataDir, fileName);
-        if (File.Exists(direct))
+        // Relative subpath provided
+        if (fileName.Contains(Path.DirectorySeparatorChar) || fileName.Contains(Path.AltDirectorySeparatorChar))
         {
-            return await File.ReadAllTextAsync(direct);
+            var combined = Path.Combine(dataDir, fileName);
+            if (File.Exists(combined))
+            {
+                return await File.ReadAllTextAsync(combined);
+            }
+            throw new FileNotFoundException($"Classifier JSON file '{fileName}' not found under '{dataDir}'.");
         }
 
-        // Try case-insensitive partial match in Data
-        var candidates = Directory.EnumerateFiles(dataDir, "*.json", SearchOption.TopDirectoryOnly)
-                                  .Where(f => Path.GetFileName(f).Contains(fileName, StringComparison.OrdinalIgnoreCase))
-                                  .ToList();
-        if (candidates.Count == 1)
+        // Recursive exact filename search
+        var matches = Directory.EnumerateFiles(dataDir, fileName, SearchOption.AllDirectories)
+                               .Where(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase))
+                               .Take(2)
+                               .ToList();
+        if (matches.Count == 1)
         {
-            return await File.ReadAllTextAsync(candidates[0]);
+            return await File.ReadAllTextAsync(matches[0]);
         }
-        if (candidates.Count > 1)
+        if (matches.Count > 1)
         {
-            throw new InvalidOperationException($"Multiple files match '{fileName}'. Please be more specific.");
+            throw new InvalidOperationException($"Multiple classifier files named '{fileName}' found under '{dataDir}'. Please specify a relative path.");
         }
 
-        throw new FileNotFoundException($"Classifier JSON file '{fileName}' not found in '{dataDir}'");
+        throw new FileNotFoundException($"Classifier JSON file '{fileName}' not found under '{dataDir}'.");
     }
 
     /// Minimal validation that content is JSON and not empty.

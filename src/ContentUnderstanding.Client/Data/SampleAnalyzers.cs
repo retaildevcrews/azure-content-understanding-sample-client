@@ -8,20 +8,52 @@ namespace ContentUnderstanding.Client.Data;
 public static class SampleAnalyzers
 {
     /// <summary>
-    /// Loads an analyzer definition from a JSON file
+    /// Loads an analyzer JSON by either:
+    ///  1. Using an absolute path directly, OR
+    ///  2. Treating the argument as a relative path under Data/, OR
+    ///  3. Recursively searching Data/ for a filename match (case-insensitive) when not found directly.
+    /// No partial / substring matching is performed (exact filename only when searching).
     /// </summary>
-    /// <param name="fileName">Name of the JSON file (without path)</param>
-    /// <returns>The raw JSON content as a string</returns>
     public static async Task<string> LoadAnalyzerJsonAsync(string fileName)
     {
-        var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", fileName);
-        
-        if (!File.Exists(filePath))
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new ArgumentException("Analyzer file name is required", nameof(fileName));
+
+        // Absolute path first
+        if (Path.IsPathFullyQualified(fileName) && File.Exists(fileName))
         {
-            throw new FileNotFoundException($"Analyzer JSON file not found: {fileName}");
+            return await File.ReadAllTextAsync(fileName);
         }
 
-        return await File.ReadAllTextAsync(filePath);
+    var dataDir = ContentUnderstanding.Client.Utilities.PathResolver.DataDir();
+
+        // If caller provided a relative subpath (contains directory separator), honor it directly
+        if (fileName.Contains(Path.DirectorySeparatorChar) || fileName.Contains(Path.AltDirectorySeparatorChar))
+        {
+            var combined = Path.Combine(dataDir, fileName);
+            if (File.Exists(combined))
+            {
+                return await File.ReadAllTextAsync(combined);
+            }
+            throw new FileNotFoundException($"Analyzer JSON file '{fileName}' not found under '{dataDir}'.");
+        }
+
+        // Search recursively for an exact filename match
+        var matches = Directory.EnumerateFiles(dataDir, fileName, SearchOption.AllDirectories)
+                               .Where(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase))
+                               .Take(2) // we only need to know if >1
+                               .ToList();
+
+        if (matches.Count == 1)
+        {
+            return await File.ReadAllTextAsync(matches[0]);
+        }
+        if (matches.Count > 1)
+        {
+            throw new InvalidOperationException($"Multiple analyzer files named '{fileName}' found under '{dataDir}'. Please specify a relative path.");
+        }
+
+        throw new FileNotFoundException($"Analyzer JSON file '{fileName}' not found under '{dataDir}'.");
     }
 
     /// <summary>
